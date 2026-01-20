@@ -15,6 +15,9 @@ from modules.img_read.reader import ImageData
 from PIL import Image
 import io
 
+torch.set_grad_enabled(False)
+torch.backends.cudnn.benchmark = True
+
 class QwenImageBackend(ModelAdapter):
 
     def __init__(self, config: dict):
@@ -29,6 +32,8 @@ class QwenImageBackend(ModelAdapter):
         self.model = AutoModelForVision2Seq.from_pretrained(
             "Qwen/Qwen-Image-2512"
         ).to(self.device)
+        self.model.eval()
+        self.model_id = self.model.config._name_or_path
 
     def generate_image(self, prompt: PromptObject) -> ImageData:
         """
@@ -46,7 +51,8 @@ class QwenImageBackend(ModelAdapter):
         metadata = {
             "prompt": prompt.prompt_text,
             "seed": prompt.seed,
-            "params": str(prompt.params)
+            "params": str(prompt.params),
+            "model": self.model_id
         }
         return ImageData(
             pixels=image,
@@ -63,6 +69,9 @@ class QwenImageBackend(ModelAdapter):
         return self.generate_image(prompt)
 
     def shutdown(self):
+        del self.model
+        del self.tokenizer
         self.model = None
+        self.tokenizer = None
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
