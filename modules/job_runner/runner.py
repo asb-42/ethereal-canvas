@@ -9,6 +9,7 @@ from modules.img_read.reader import read_image
 from modules.img_write.writer import write_image
 from modules.logging.logger import log_step, log_session_header
 from modules.qwen_image_backend.loader import QwenImageBackend
+from modules.diffusers_backend.backend import DiffusersBackend
 from modules.qwen_image_backend.memory import clear_gpu
 import yaml
 
@@ -18,7 +19,10 @@ log_session_header()
 with open("config/model_config.yaml") as f:
     MODEL_CONFIG = yaml.safe_load(f)
 
-backend = QwenImageBackend(MODEL_CONFIG)
+if MODEL_CONFIG.get("backend") == "diffusers":
+    backend = DiffusersBackend(MODEL_CONFIG)
+else:
+    backend = QwenImageBackend(MODEL_CONFIG)
 backend.load()
 
 SUPPORTED_TASKS = ["generate", "edit", "inpaint"]
