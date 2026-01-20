@@ -37,3 +37,13 @@ print("Done")
 PYCODE
 
 echo "=== Installation Complete ==="
+
+echo "=== Create Pinokio manifest ==="
+cat <<EOF > pinokio.json
+{
+  "name": "ethereal_canvas",
+  "version": "0.1.0",
+  "entrypoint": "scripts/run.sh",
+  "dependencies": ["python>=3.10"]
+}
+EOF
