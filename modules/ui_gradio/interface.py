@@ -21,6 +21,7 @@ def launch_ui(run_generate, run_edit, get_logs, config):
                 input_image = gr.Image(type="filepath", label="Upload Image (optional)")
                 prompt_text = gr.Textbox(label="Prompt", placeholder="Enter prompt here")
                 seed_input = gr.Number(label="Seed (optional)", value=0)
+                enable_inpainting = gr.Checkbox(label="Enable Inpainting (coming soon)", value=False, interactive=False)
                 button_generate = gr.Button("Generate")
                 button_edit = gr.Button("Edit")
                 output_image = gr.Image(label="Output Image")
