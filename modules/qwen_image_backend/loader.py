@@ -68,6 +68,9 @@ class QwenImageBackend(ModelAdapter):
         """
         return self.generate_image(prompt)
 
+    def inpaint(self, image: ImageData, mask: ImageData, prompt: PromptObject) -> ImageData:
+        raise NotImplementedError("Inpainting not yet supported")
+
     def shutdown(self):
         del self.model
         del self.tokenizer

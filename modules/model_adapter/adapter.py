@@ -23,5 +23,9 @@ class ModelAdapter(ABC):
         pass
 
     @abstractmethod
+    def inpaint(self, image: ImageData, mask: ImageData, prompt: PromptObject) -> ImageData:
+        pass
+
+    @abstractmethod
     def shutdown(self):
         pass
