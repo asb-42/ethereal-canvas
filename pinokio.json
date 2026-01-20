@@ -1,0 +1,6 @@
+{
+  "name": "ethereal_canvas",
+  "version": "0.1.0",
+  "entrypoint": "scripts/run.sh",
+  "dependencies": ["python>=3.10"]
+}
