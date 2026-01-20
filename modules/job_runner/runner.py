@@ -11,7 +11,9 @@ from modules.logging.logger import log_step, log_session_header
 from modules.qwen_image_backend.loader import QwenImageBackend
 from modules.diffusers_backend.backend import DiffusersBackend
 from modules.qwen_image_backend.memory import clear_gpu
+from modules.job_runner.benchmark import benchmark
 import yaml
+import torch
 
 # Initialize logging on first import
 log_session_header()
@@ -53,19 +55,25 @@ def execute_task(task_type, prompt_text, seed=None, input_path=None, mask_path=N
     if input_path:
         image_data = read_image(input_path)
 
+    # Benchmark before execution
+    elapsed, mem_peak = None, None
+    
     # Choose
     try:
         if task_type == "generate":
+            elapsed, mem_peak = benchmark(backend, prompt_obj)
             result = backend.generate_image(prompt_obj)
         elif task_type == "edit":
             if not image_data:
                 raise ValueError("Edit task requires an input image")
+            elapsed, mem_peak = benchmark(backend, prompt_obj)
             result = backend.edit_image(image_data, prompt_obj)
         elif task_type == "inpaint":
             from modules.img_read.mask_reader import read_mask
             if not image_data or not mask_path:
                 raise ValueError("Inpainting requires both image and mask")
             mask_data = read_mask(mask_path)
+            elapsed, mem_peak = benchmark(backend, prompt_obj)
             result = backend.inpaint(image_data, mask_data, prompt_obj)
         else:
             raise ValueError("Unknown task type")
@@ -74,8 +82,15 @@ def execute_task(task_type, prompt_text, seed=None, input_path=None, mask_path=N
         out_path = f"outputs/{task_type}_{prompt_obj.seed}.png"
         write_image(result, out_path, result.metadata)
         
+        # Log performance metrics
+        perf_info = ""
+        if elapsed is not None:
+            perf_info += f"Latency: {elapsed:.2f}s\n"
+        if mem_peak is not None and mem_peak > 0:
+            perf_info += f"Peak VRAM: {mem_peak / 1024**3:.2f}GB\n"
+        
         log_step(
-            f"Output saved to {out_path}",
+            f"Output saved to {out_path}\n### Performance\n{perf_info}",
             task_type=task_type,
             output_path=out_path,
             status="completed"
