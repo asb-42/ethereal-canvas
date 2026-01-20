@@ -21,7 +21,16 @@ with open("config/model_config.yaml") as f:
 backend = QwenImageBackend(MODEL_CONFIG)
 backend.load()
 
-def execute_task(task_type, prompt_text, seed=None, input_path=None):
+SUPPORTED_TASKS = ["generate", "edit", "inpaint"]
+
+def execute_task(task_type, prompt_text, seed=None, input_path=None, mask_path=None):
+    # Validation
+    if task_type == "inpaint" and not mask_path:
+        raise ValueError("Inpainting requires a mask image")
+    
+    if task_type not in SUPPORTED_TASKS:
+        raise ValueError(f"Unsupported task type: {task_type}")
+    
     prompt_obj = normalize_prompt(prompt_text, seed)
     set_global_seed(prompt_obj.seed)
     
@@ -45,7 +54,15 @@ def execute_task(task_type, prompt_text, seed=None, input_path=None):
         if task_type == "generate":
             result = backend.generate_image(prompt_obj)
         elif task_type == "edit":
+            if not image_data:
+                raise ValueError("Edit task requires an input image")
             result = backend.edit_image(image_data, prompt_obj)
+        elif task_type == "inpaint":
+            from modules.img_read.mask_reader import read_mask
+            if not image_data or not mask_path:
+                raise ValueError("Inpainting requires both image and mask")
+            mask_data = read_mask(mask_path)
+            result = backend.inpaint(image_data, mask_data, prompt_obj)
         else:
             raise ValueError("Unknown task type")
 
