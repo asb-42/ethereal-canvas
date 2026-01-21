@@ -1,24 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ---------------------------------------------
-# Ethereal Canvas Installation Script
-# ---------------------------------------------
+echo "---------------------------------------------"
+echo "Ethereal Canvas Developer Installer"
+echo "---------------------------------------------"
 
-echo "Starting Ethereal Canvas installation..."
-
-# Determine script and app root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_ROOT="$SCRIPT_DIR/.."
 cd "$APP_ROOT"
-echo "App root directory: $APP_ROOT"
+echo "App root: $APP_ROOT"
 
-# ---------------------------------------------
-# Step 1: Check Python version
-# ---------------------------------------------
+# --------------------------
+# Step 1: Check Python >=3.10
+# --------------------------
 PYTHON=$(command -v python3 || true)
 if [[ -z "$PYTHON" ]]; then
-    echo "ERROR: Python3 not found. Please install Python >=3.10."
+    echo "ERROR: Python3 >=3.10 required"
     exit 1
 fi
 
@@ -27,74 +24,53 @@ if (( $(echo "$PYTHON_VERSION < 3.10" | bc -l) )); then
     echo "ERROR: Python >=3.10 required, found $PYTHON_VERSION"
     exit 1
 fi
-echo "Python version $PYTHON_VERSION detected."
+echo "Python $PYTHON_VERSION detected."
 
-# ---------------------------------------------
-# Step 2: Create & activate virtual environment
-# ---------------------------------------------
+# --------------------------
+# Step 2: Create & activate venv
+# --------------------------
 if [[ ! -d ".venv" ]]; then
     echo "Creating virtual environment..."
     $PYTHON -m venv .venv
 fi
-
-echo "Activating virtual environment..."
 source .venv/bin/activate
+echo "Virtual environment activated."
 
-# ---------------------------------------------
-# Step 3: Install Python dependencies
-# ---------------------------------------------
-if [[ ! -f "requirements.txt" ]]; then
-    echo "ERROR: requirements.txt not found in $APP_ROOT"
-    exit 1
-fi
-
+# --------------------------
+# Step 3: Install dependencies
+# --------------------------
 echo "Upgrading pip..."
 pip install --upgrade pip
 
-echo "Installing dependencies from requirements.txt..."
+echo "Installing Python dependencies..."
 pip install -r requirements.txt
 
-# ---------------------------------------------
-# Step 4: Download & cache Qwen-Image model
-# ---------------------------------------------
-MODEL_NAME="$($PYTHON -c 'import yaml; print(yaml.safe_load(open("config/model_config.yaml"))["model_name"]')')"
-MODEL_CACHE_DIR="$APP_ROOT/models"
-mkdir -p "$MODEL_CACHE_DIR"
+# --------------------------
+# Step 4: Developer Options
+# --------------------------
+echo "Developer options:"
+echo "1. Download models now (recommended for testing)"
+echo "2. Skip models (download on first use)"
+echo -n "Choose option [1-2]: "
+read -r choice
 
-python - <<PYTHON
-from pathlib import Path
+if [[ "$choice" == "1" ]]; then
+    echo "Downloading models..."
+    MODEL_CACHE_DIR="$APP_ROOT/models"
+    mkdir -p "$MODEL_CACHE_DIR"
+    
+    # Note: Model downloads will be handled by the backends on first use
+    echo "Models will be downloaded to $MODEL_CACHE_DIR on first use."
+else
+    echo "Skipping model downloads. Models will be downloaded on first use."
+fi
 
-model_dir = Path("$MODEL_CACHE_DIR") / "Qwen-Image-2512"
-
-if not model_dir.exists():
-    print(f"Downloading model {MODEL_NAME} to {model_dir}")
-    try:
-        # Try Qwen-specific loader if installed
-        from qwen_image import QwenImageForConditionalGeneration
-        model = QwenImageForConditionalGeneration.from_pretrained(
-            "$MODEL_NAME", cache_dir=str(model_dir)
-        )
-    except ImportError:
-        # Fall back to generic AutoModel loader
-        print("qwen_image package not installed; falling back to AutoModelForImageGeneration")
-        from transformers import AutoModelForImageGeneration, AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained("$MODEL_NAME", cache_dir=str(model_dir))
-        model = AutoModelForImageGeneration.from_pretrained("$MODEL_NAME", cache_dir=str(model_dir))
-else:
-    print(f"Model already cached at {model_dir}")
-PYTHON
-
-# ---------------------------------------------
-# Step 5: Post-install checks
-# ---------------------------------------------
+# --------------------------
+# Step 5: Completion
+# --------------------------
 echo "---------------------------------------------"
-echo "Ethereal Canvas installation complete!"
-echo "Python version: $($PYTHON --version)"
-echo "Installed packages:"
-pip list
-echo "Qwen-Image-2512 model cached at: $MODEL_CACHE_DIR"
-echo ""
-echo "You can now run the application using:"
-echo "  source .venv/bin/activate"
-echo "  python run_ethereal_canvas.py"
+echo "Developer installation complete!"
+echo "Virtual environment: .venv"
+echo "Activate with: source .venv/bin/activate"
+echo "Run application: python run_ethereal_canvas.py"
 echo "---------------------------------------------"

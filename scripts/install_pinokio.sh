@@ -1,26 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# -------------------------------------------------------
-# Ethereal Canvas - Pinokio One-Click Installer Script
-# -------------------------------------------------------
-
 echo "---------------------------------------------"
-echo "Welcome to Ethereal Canvas Pinokio Installer"
+echo "Ethereal Canvas Pinokio Installer"
 echo "---------------------------------------------"
 
-# Determine script and app root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_ROOT="$SCRIPT_DIR/.."
 cd "$APP_ROOT"
-echo "App root directory: $APP_ROOT"
+echo "App root: $APP_ROOT"
 
-# -------------------------------------------------------
-# Step 1: Detect Python >=3.10
-# -------------------------------------------------------
+# --------------------------
+# Step 1: Check Python >=3.10
+# --------------------------
 PYTHON=$(command -v python3 || true)
 if [[ -z "$PYTHON" ]]; then
-    echo "ERROR: Python3 not found. Pinokio requires Python >=3.10."
+    echo "ERROR: Python3 >=3.10 required"
     exit 1
 fi
 
@@ -31,72 +26,77 @@ if (( $(echo "$PYTHON_VERSION < 3.10" | bc -l) )); then
 fi
 echo "Python $PYTHON_VERSION detected."
 
-# -------------------------------------------------------
-# Step 2: Create & activate virtual environment
-# -------------------------------------------------------
+# --------------------------
+# Step 2: Create & activate venv
+# --------------------------
 if [[ ! -d ".venv" ]]; then
     echo "Creating virtual environment..."
     $PYTHON -m venv .venv
 fi
-
-echo "Activating virtual environment..."
 source .venv/bin/activate
+echo "Virtual environment activated."
 
-# -------------------------------------------------------
+# --------------------------
 # Step 3: Install dependencies
-# -------------------------------------------------------
-if [[ ! -f "requirements.txt" ]]; then
-    echo "ERROR: requirements.txt not found in $APP_ROOT"
-    exit 1
-fi
-
+# --------------------------
 echo "Upgrading pip..."
 pip install --upgrade pip
 
 echo "Installing Python dependencies..."
 pip install -r requirements.txt
 
-# -------------------------------------------------------
-# Step 4: Download and cache Qwen-Image model
-# -------------------------------------------------------
-MODEL_NAME="Qwen/Qwen-Image-2512"
+# Ensure diffusers and qwen_image packages are installed
+pip install --upgrade diffusers
+pip install --upgrade qwen_image || true  # optional fallback
+
+# --------------------------
+# Step 4: Download & cache models
+# --------------------------
 MODEL_CACHE_DIR="$APP_ROOT/models"
 mkdir -p "$MODEL_CACHE_DIR"
 
-python - <<PYTHON
+# Function to download a model
+download_model() {
+    local model_name="$1"
+    local folder_name="$2"
+    local cache_path="$MODEL_CACHE_DIR/$folder_name"
+
+    if [[ -d "$cache_path" ]]; then
+        echo "Model $model_name already cached at $cache_path"
+        return
+    fi
+
+    echo "Downloading model $model_name..."
+    python - <<PYTHON
 from pathlib import Path
+import torch
+model_dir = Path("$cache_path")
+model_dir.mkdir(parents=True, exist_ok=True)
 
-model_dir = Path("$MODEL_CACHE_DIR") / "Qwen-Image-2512"
-
-if not model_dir.exists():
-    print(f"Downloading model {MODEL_NAME} to {model_dir}")
-    try:
-        # Try Qwen-specific loader if installed
-        from qwen_image import QwenImageForConditionalGeneration
-        model = QwenImageForConditionalGeneration.from_pretrained(
-            "$MODEL_NAME", cache_dir=str(model_dir)
-        )
-    except ImportError:
-        # Fall back to generic AutoModel loader
-        print("qwen_image package not installed; falling back to AutoModelForImageGeneration")
-        from transformers import AutoModelForImageGeneration, AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained("$MODEL_NAME", cache_dir=str(model_dir))
-        model = AutoModelForImageGeneration.from_pretrained("$MODEL_NAME", cache_dir=str(model_dir))
-else:
-    print(f"Model already cached at {model_dir}")
+try:
+    if "Edit" in "$model_name":
+        from diffusers import QwenImageEditPlusPipeline
+        QwenImageEditPlusPipeline.from_pretrained("$model_name", cache_dir=str(model_dir), torch_dtype=torch.float16)
+    else:
+        from diffusers import StableDiffusionPipeline  # placeholder for T2I
+        StableDiffusionPipeline.from_pretrained("$model_name", cache_dir=str(model_dir), torch_dtype=torch.float16)
+    print(f"Model {model_name} downloaded successfully.")
+except Exception as e:
+    print(f"ERROR downloading {model_name}: {e}")
+    exit(1)
 PYTHON
+}
 
-# -------------------------------------------------------
-# Step 5: Final message
-# -------------------------------------------------------
+download_model "Qwen/Qwen-Image-2512" "Qwen-Image-2512"
+download_model "Qwen/Qwen-Image-Edit-2511" "Qwen-Image-Edit-2511"
+
+# --------------------------
+# Step 5: Completion
+# --------------------------
 echo "---------------------------------------------"
-echo "Ethereal Canvas installation via Pinokio complete!"
-echo "Python version: $($PYTHON --version)"
-echo "Installed packages:"
-pip list
-echo "Qwen-Image-2512 model cached at: $MODEL_CACHE_DIR"
-echo ""
-echo "To launch the app from Pinokio:"
+echo "Installation complete!"
+echo "Models cached at $MODEL_CACHE_DIR"
+echo "You can now run the application:"
 echo "  source .venv/bin/activate"
 echo "  python run_ethereal_canvas.py"
 echo "---------------------------------------------"

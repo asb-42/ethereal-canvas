@@ -4,9 +4,17 @@ Markdown-based logging and Git integration.
 
 import subprocess
 import sys
-import torch
 from datetime import datetime
 from pathlib import Path
+
+# Try to import torch for GPU info, but make it optional
+torch = None
+TORCH_AVAILABLE = False
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    pass
 
 
 LOG_PATH = Path("logs/runlog.md")
@@ -22,8 +30,12 @@ def log_session_header():
         git_hash = "unknown"
     
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    cuda_available = torch.cuda.is_available()
-    gpu_name = torch.cuda.get_device_name(0) if cuda_available else "CPU"
+    if TORCH_AVAILABLE and torch is not None:
+        cuda_available = torch.cuda.is_available()
+        gpu_name = torch.cuda.get_device_name(0) if cuda_available else "CPU"
+    else:
+        cuda_available = False
+        gpu_name = "CPU (torch not available)"
     
     header = f"# Session Started: {timestamp}\n"
     header += f"- Git commit: {git_hash}\n"

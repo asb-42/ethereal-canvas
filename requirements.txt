@@ -1,5 +1,4 @@
 # Core runtime
-python>=3.10
 
 # Deep learning
 torch
