@@ -12,6 +12,7 @@ from modules.qwen_image_backend.loader import QwenImageBackend
 from modules.diffusers_backend.backend import DiffusersBackend
 from modules.qwen_image_backend.memory import clear_gpu
 from modules.job_runner.benchmark import benchmark
+from modules.job_runner.cleanup import cleanup_old_outputs
 import yaml
 import torch
 import signal
@@ -98,6 +99,9 @@ def execute_task(task_type, prompt_text, seed=None, input_path=None, mask_path=N
         # Write
         out_path = f"outputs/{task_type}_{prompt_obj.seed}.png"
         write_image(result, out_path, result.metadata)
+        
+        # Cleanup old outputs
+        cleanup_old_outputs()
         
         # Log performance metrics
         perf_info = ""
