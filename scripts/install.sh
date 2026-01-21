@@ -57,7 +57,7 @@ pip install -r requirements.txt
 # ---------------------------------------------
 # Step 4: Download & cache Qwen-Image model
 # ---------------------------------------------
-MODEL_NAME="Qwen/Qwen-Image-2512"
+MODEL_NAME="$($PYTHON -c 'import yaml; print(yaml.safe_load(open("config/model_config.yaml"))["model_name"]')')"
 MODEL_CACHE_DIR="$APP_ROOT/models"
 mkdir -p "$MODEL_CACHE_DIR"
 
