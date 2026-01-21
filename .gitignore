@@ -1,0 +1,176 @@
+# Ethereal Canvas .gitignore
+# Comprehensive ignore patterns for Python ML projects
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# PyTorch and HuggingFace caches
+.cache/
+torch_cache/
+transformers_cache/
+huggingface_hub/
+datasets_cache/
+
+# Model downloads and cache
+models/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# Generated outputs
+outputs/
+generated_*.png
+edited_*.png
+inpainted_*.png
+*.log
+
+# Gradio specific
+gradio_cached_examples/
+*.gradio
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+*.out
+*.err
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Configuration overrides (keep templates, ignore local overrides)
+config/local_*.yaml
+config/local_*.json
+*.overrides.yaml
+
+# Testing and coverage
+.coverage
+.pytest_cache/
+.tox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Documentation build
+docs/_build/
+site/
+
+# Package files
+*.zip
+*.tar.gz
+*.rar
+
+# Large files that should be handled by Git LFS
+*.large
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# Performance and profiling
+*.prof
+*.lprof
+.profile
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Node.js (if any frontend tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker
+.dockerignore
+
+# Kubernetes
+*.kubeconfig
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+
+# Security
+*.key
+*.pem
+*.crt
+*.p12
+
+# Local development
+local/
+dev/
+test_*.py
+debug_*.py
+
+# Experimental features
+experimental/
+sandbox/
+
+# Monitoring and analytics
+monitoring/
+metrics/
