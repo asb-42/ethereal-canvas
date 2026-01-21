@@ -4,7 +4,12 @@
 
 set -e
 
-echo "=== System Prerequisite Check ==="
+# Resolve directory where script resides
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$SCRIPT_DIR/.."
+
+echo "Script directory: $SCRIPT_DIR"
+echo "App root: $APP_ROOT"
 
 # Python
 PYTHON=python3
@@ -34,7 +39,7 @@ else
     pip install torch torchvision
 fi
 
-pip install -r ../requirements.txt
+pip install -r "$APP_ROOT/requirements.txt"
 
 echo "=== Model Download ==="
 python - << 'PYCODE'
@@ -48,7 +53,7 @@ PYCODE
 echo "=== Installation Complete ==="
 
 echo "=== Create Pinokio manifest ==="
-cat <<EOF > pinokio.json
+cat <<EOF > "$APP_ROOT/pinokio.json"
 {
   "name": "ethereal_canvas",
   "version": "0.1.0",
