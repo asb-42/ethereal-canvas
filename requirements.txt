@@ -1,5 +1,5 @@
 # Core runtime
-python>=3.10.0
+# python>=3.10  # Enforced at interpreter level in install script.0
 
 # Deep learning
 torch
