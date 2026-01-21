@@ -1,4 +1,5 @@
-model_name: Qwen-Image-2512
-backend: transformers
+generate_model: "Qwen/Qwen-Image-2512"
+edit_model: "Qwen/Qwen-Image-Edit-2511"
+backend: diffusers
 precision: fp16
 cuda_autodetect: true
