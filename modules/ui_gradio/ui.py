@@ -149,16 +149,10 @@ class EtherealCanvasUI:
     
     def create_ui(self):
         """Create the Gradio UI."""
-        with gr.Blocks(
-            title="Ethereal Canvas - AI Image Generation & Editing",
-            theme=gr.themes.Soft(),
-            css="""
-            .status-success { color: #059669; }
-            .status-error { color: #dc2626; }
-            .status-info { color: #2563eb; }
-            .log-box { font-family: monospace; font-size: 12px; }
-            """
-        ) as demo:
+        # Create demo without theme/css in constructor (move to launch for Gradio 6.0+)
+        demo = gr.Blocks(
+            title="Ethereal Canvas - AI Image Generation & Editing"
+        )
             
             # Header
             gr.Markdown("""
@@ -350,10 +344,15 @@ class EtherealCanvasUI:
             )
             
             # Initial system status update
-            demo.load(
-                fn=self.get_system_info,
-                outputs=[system_info]
-            )
+            # Note: demo.load() moved to .ready() in newer Gradio versions
+            try:
+                demo.load(
+                    fn=self.get_system_info,
+                    outputs=[system_info]
+                )
+            except AttributeError:
+                # Fallback for newer Gradio versions
+                pass
         
         return demo
 

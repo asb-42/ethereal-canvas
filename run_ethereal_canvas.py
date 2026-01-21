@@ -19,7 +19,7 @@ def main():
     
     try:
         # Import and launch the UI
-        from modules.ui_gradio.ui import launch_ui
+        from modules.ui_gradio.simple_ui import launch_ui
         
         # Get configuration from environment or use defaults
         server_name = os.getenv("GRADIO_SERVER_NAME", "0.0.0.0")
