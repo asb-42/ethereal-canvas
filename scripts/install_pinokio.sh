@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ---------------------------------------------
-# Ethereal Canvas Installation Script
-# ---------------------------------------------
+# -------------------------------------------------------
+# Ethereal Canvas - Pinokio One-Click Installer Script
+# -------------------------------------------------------
 
-echo "Starting Ethereal Canvas installation..."
+echo "---------------------------------------------"
+echo "Welcome to Ethereal Canvas Pinokio Installer"
+echo "---------------------------------------------"
 
 # Determine script and app root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,12 +15,12 @@ APP_ROOT="$SCRIPT_DIR/.."
 cd "$APP_ROOT"
 echo "App root directory: $APP_ROOT"
 
-# ---------------------------------------------
-# Step 1: Check Python version
-# ---------------------------------------------
+# -------------------------------------------------------
+# Step 1: Detect Python >=3.10
+# -------------------------------------------------------
 PYTHON=$(command -v python3 || true)
 if [[ -z "$PYTHON" ]]; then
-    echo "ERROR: Python3 not found. Please install Python >=3.10."
+    echo "ERROR: Python3 not found. Pinokio requires Python >=3.10."
     exit 1
 fi
 
@@ -27,11 +29,11 @@ if (( $(echo "$PYTHON_VERSION < 3.10" | bc -l) )); then
     echo "ERROR: Python >=3.10 required, found $PYTHON_VERSION"
     exit 1
 fi
-echo "Python version $PYTHON_VERSION detected."
+echo "Python $PYTHON_VERSION detected."
 
-# ---------------------------------------------
+# -------------------------------------------------------
 # Step 2: Create & activate virtual environment
-# ---------------------------------------------
+# -------------------------------------------------------
 if [[ ! -d ".venv" ]]; then
     echo "Creating virtual environment..."
     $PYTHON -m venv .venv
@@ -40,9 +42,9 @@ fi
 echo "Activating virtual environment..."
 source .venv/bin/activate
 
-# ---------------------------------------------
-# Step 3: Install Python dependencies
-# ---------------------------------------------
+# -------------------------------------------------------
+# Step 3: Install dependencies
+# -------------------------------------------------------
 if [[ ! -f "requirements.txt" ]]; then
     echo "ERROR: requirements.txt not found in $APP_ROOT"
     exit 1
@@ -51,12 +53,12 @@ fi
 echo "Upgrading pip..."
 pip install --upgrade pip
 
-echo "Installing dependencies from requirements.txt..."
+echo "Installing Python dependencies..."
 pip install -r requirements.txt
 
-# ---------------------------------------------
-# Step 4: Download & cache Qwen-Image model
-# ---------------------------------------------
+# -------------------------------------------------------
+# Step 4: Download and cache Qwen-Image model
+# -------------------------------------------------------
 MODEL_NAME="Qwen/Qwen-Image-2512"
 MODEL_CACHE_DIR="$APP_ROOT/models"
 mkdir -p "$MODEL_CACHE_DIR"
@@ -84,17 +86,17 @@ else:
     print(f"Model already cached at {model_dir}")
 PYTHON
 
-# ---------------------------------------------
-# Step 5: Post-install checks
-# ---------------------------------------------
+# -------------------------------------------------------
+# Step 5: Final message
+# -------------------------------------------------------
 echo "---------------------------------------------"
-echo "Ethereal Canvas installation complete!"
+echo "Ethereal Canvas installation via Pinokio complete!"
 echo "Python version: $($PYTHON --version)"
 echo "Installed packages:"
 pip list
 echo "Qwen-Image-2512 model cached at: $MODEL_CACHE_DIR"
 echo ""
-echo "You can now run the application using:"
+echo "To launch the app from Pinokio:"
 echo "  source .venv/bin/activate"
 echo "  python run_ethereal_canvas.py"
 echo "---------------------------------------------"
