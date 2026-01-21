@@ -24,12 +24,16 @@ fi
 
 # Create and activate virtual environment
 echo "--- Creating venv ---"
-$PYTHON -m venv .venv
+python3.10 -m venv .venv || python3 -m venv .venv
 source .venv/bin/activate
 
 echo "--- Installing Python dependencies ---"
 
+# Upgrade pip
 pip install --upgrade pip
+
+# Verify Python version
+python --version
 
 # Install torch separately to respect local CUDA
 if command -v nvcc &> /dev/null; then
