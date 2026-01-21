@@ -34,7 +34,7 @@ else
     pip install torch torchvision
 fi
 
-pip install -r requirements.txt
+pip install -r ../requirements.txt
 
 echo "=== Model Download ==="
 python - << 'PYCODE'
