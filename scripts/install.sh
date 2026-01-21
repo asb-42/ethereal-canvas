@@ -22,10 +22,19 @@ echo "--- Creating venv ---"
 $PYTHON -m venv .venv
 source .venv/bin/activate
 
-# Install Python packages
+echo "--- Installing Python dependencies ---"
+
 pip install --upgrade pip
-pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu$(nvcc --version | grep -o '[0-9]\+.[0-9]\+' 2>/dev/null || echo "118")
-pip install transformers gradio pillow gitpython
+
+# Install torch separately to respect local CUDA
+if command -v nvcc &> /dev/null; then
+    CUDA_VERSION=$(nvcc --version | grep -o '[0-9]\+\.[0-9]\+' | head -n1)
+    pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu${CUDA_VERSION/./}
+else
+    pip install torch torchvision
+fi
+
+pip install -r requirements.txt
 
 echo "=== Model Download ==="
 python - << 'PYCODE'
