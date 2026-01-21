@@ -18,6 +18,10 @@ import torch
 # Initialize logging on first import
 log_session_header()
 
+# Restore last session on startup
+from modules.job_runner.session import load_session, save_session
+last_session = load_session()
+
 with open("config/model_config.yaml") as f:
     MODEL_CONFIG = yaml.safe_load(f)
 

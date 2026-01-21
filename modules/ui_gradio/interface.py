@@ -14,14 +14,23 @@ from modules.prompt_engine.engine import normalize_prompt
 from modules.prompt_engine.templates import PROMPT_TEMPLATES, apply_template
 
 def launch_ui(run_generate, run_edit, get_logs, config):
+    from modules.job_runner.session import load_session
+    last_session = load_session()
     with gr.Blocks() as demo:
         gr.Markdown("# Ethereal Canvas")
 
         with gr.Row():
             with gr.Column():
                 input_image = gr.Image(type="filepath", label="Upload Image (optional)")
-                prompt_text = gr.Textbox(label="Prompt", placeholder="Enter prompt here")
-                seed_input = gr.Number(label="Seed (optional)", value=0)
+                prompt_text = gr.Textbox(
+                    label="Prompt", 
+                    placeholder="Enter prompt here",
+                    value=last_session.get("last_prompt", "")
+                )
+                seed_input = gr.Number(
+                    label="Seed (optional)", 
+                    value=last_session.get("last_seed", 0)
+                )
                 prompt_style = gr.Dropdown(
                     choices=["none"] + list(PROMPT_TEMPLATES.keys()),
                     value="none",
