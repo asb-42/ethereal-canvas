@@ -71,6 +71,17 @@ All operations are logged in `logs/runlog.md` with:
 
 Use structured logging in `modules/logging/logger.py`
 
+## Dependency Management
+
+All Python dependencies are declared in `requirements.txt`.
+
+Rules:
+- No Python package may be installed ad-hoc in scripts
+- Version pinning should be added only when required
+- CUDA-specific handling is performed in `install.sh`, not in requirements.txt
+
+This ensures reproducible and auditable environments.
+
 ## Known Limitations
 
 1. **Inpainting**: Interface defined but not implemented
