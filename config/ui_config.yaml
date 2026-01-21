@@ -1,0 +1,38 @@
+# UI Configuration for Ethereal Canvas
+
+# Gradio server settings
+server:
+  host: "0.0.0.0"
+  port: 7860
+  share: false
+  inbrowser: true
+
+# UI behavior settings
+ui:
+  max_prompt_length: 500
+  max_log_lines: 10
+  show_system_info: true
+  auto_download: true
+
+# Processing settings
+processing:
+  timeout_seconds: 300
+  concurrent_tasks: 1
+  clear_cache_on_error: true
+
+# File handling
+files:
+  output_directory: "outputs"
+  max_file_size_mb: 50
+  supported_formats: ["png", "jpg", "jpeg"]
+  
+# Model settings integration
+models:
+  t2i_model: "Qwen/Qwen-Image-2512"
+  i2i_model: "Qwen/Qwen-Image-Edit-2511"
+  
+# Logging
+logging:
+  level: "INFO"
+  save_to_file: true
+  log_directory: "logs"
