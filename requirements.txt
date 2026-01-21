@@ -1,0 +1,26 @@
+# Core runtime
+python>=3.10
+
+# Deep learning
+torch
+torchvision
+
+# Hugging Face
+transformers
+diffusers
+accelerate
+safetensors
+
+# UI
+gradio
+
+# Imaging
+pillow
+
+# Utilities
+pyyaml
+gitpython
+numpy
+
+# Optional (performance / diagnostics)
+psutil
