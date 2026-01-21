@@ -14,6 +14,8 @@ from modules.qwen_image_backend.memory import clear_gpu
 from modules.job_runner.benchmark import benchmark
 import yaml
 import torch
+import signal
+import sys
 
 # Initialize logging on first import
 log_session_header()
@@ -21,6 +23,14 @@ log_session_header()
 # Restore last session on startup
 from modules.job_runner.session import load_session, save_session
 last_session = load_session()
+
+# Watchdog timeout
+MAX_SECONDS = 300  # 5 minutes
+
+def timeout_handler(signum, frame):
+    raise TimeoutError(f"Task timed out after {MAX_SECONDS} seconds")
+
+signal.signal(signal.SIGALRM, timeout_handler)
 
 with open("config/model_config.yaml") as f:
     MODEL_CONFIG = yaml.safe_load(f)
@@ -62,6 +72,9 @@ def execute_task(task_type, prompt_text, seed=None, input_path=None, mask_path=N
     # Benchmark before execution
     elapsed, mem_peak = None, None
     
+    # Set watchdog timer
+    signal.alarm(MAX_SECONDS)
+    
     # Choose
     try:
         if task_type == "generate":
@@ -101,6 +114,7 @@ def execute_task(task_type, prompt_text, seed=None, input_path=None, mask_path=N
         )
         
         clear_gpu()
+        signal.alarm(0)  # Cancel timeout
         return out_path
         
     except Exception as e:
