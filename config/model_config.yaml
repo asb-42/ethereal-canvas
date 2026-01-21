@@ -1,5 +1,106 @@
-generate_model: "Qwen/Qwen-Image-2512"
-edit_model: "Qwen/Qwen-Image-Edit-2511"
-backend: diffusers
-precision: fp16
-cuda_autodetect: true
+# Model configuration for Ethereal Canvas.
+# Runtime-compliant with Opencode hygiene.
+
+# Available models
+available_models:
+  text_to_image:
+    id: "text-to-image"
+    name: "Text-to-Image Generation"
+    backend_class: "TextToImageBackend"
+    description: "Generate images from text descriptions"
+    model_id: "Qwen/Qwen-Image-2512"
+    
+  image_edit:
+    id: "image-edit"  
+    name: "Image-to-Image Editing"
+    backend_class: "ImageEditBackend"
+    description: "Edit existing images with text descriptions"
+    model_id: "Qwen/Qwen-Image-Edit-2511"
+    
+  image_inpaint:
+    id: "image-inpaint"
+    name: "Image Inpainting"
+    backend_class: "ImageInpaintBackend" 
+    description: "Inpaint masked areas of images"
+    model_id: "Qwen/Qwen-Image-Edit-2511"
+
+# Default models
+default_models:
+  text_to_image: "Qwen/Qwen-Image-2512"
+  image_edit: "Qwen/Qwen-Image-Edit-2511"
+  image_inpaint: "Qwen/Qwen-Image-Edit-2511"
+
+# Generation parameters
+generation_defaults:
+  text_to_image:
+    num_inference_steps: 20
+    guidance_scale: 7.5
+    num_images: 1
+    width: 512
+    height: 512
+    
+  image_edit:
+    num_inference_steps: 20
+    guidance_scale: 7.5
+    num_images: 1
+    strength: 0.8
+    
+  image_inpaint:
+    num_inference_steps: 20
+    guidance_scale: 7.5
+    num_images: 1
+    strength: 0.8
+
+# Runtime configuration
+runtime:
+  paths:
+    logs_dir: "runtime/logs"
+    outputs_dir: "runtime/outputs"
+    cache_dir: "runtime/cache"
+    tmp_dir: "runtime/tmp"
+    model_cache_root: "runtime/../models"
+  
+  seeds:
+    global_seed: null  # null = use time-based
+    reproducible: false    # enforce seeds for all operations
+    
+  logging:
+    level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+    file_rotation: true
+    max_file_size: "10MB"
+    structured_logging: true
+    
+  performance:
+    monitor_resources: true
+    cleanup_temp_files: true
+    max_memory_usage: "80%"
+    gpu_memory_fraction: 0.9
+    
+  safety:
+    validate_inputs: true
+    sanitize_prompts: true
+    rate_limit: "10_per_hour"  # operations per hour
+    max_file_size: "100MB"
+
+# Metadata standards
+metadata:
+  required_fields:
+    - model_id
+    - model_version
+    - pipeline_type
+    - prompt
+    - seed
+    - timestamp
+    - generation_parameters
+    - runtime_configuration
+    
+  formats:
+    image: "PNG"  # PNG with metadata sidecar
+    video: "MP4"  # future: animation support
+    metadata: "JSON"  # JSON sidecar files
+  
+  retention:
+    outputs: "30_days"  # keep outputs for 30 days
+    logs: "90_days"    # keep logs for 90 days
+    cache: "unlimited"  # until disk space needed
+    temp: "1_hour"    # temp files cleaned hourly
