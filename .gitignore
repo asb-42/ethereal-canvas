@@ -1,15 +1,23 @@
 # Ethereal Canvas .gitignore
 # Comprehensive ignore patterns for Python ML projects
 
-# Python virtual environments
+# Ethereal Canvas .gitignore
+# Comprehensive ignore patterns for Python ML projects with Opencode runtime hygiene
+
+# =========================
+# Python Virtual Environments
+# =========================
 .venv/
 venv/
 env/
 ENV/
 env.bak/
-venv.bak/
+env.local
+env.*.local
 
-# Python cache and compiled files
+# =========================
+# Python Cache and Compiled Files
+# =========================
 __pycache__/
 *.pyc
 *.pyo
@@ -32,80 +40,183 @@ wheels/
 *.egg
 MANIFEST
 
+# =========================
 # PyInstaller
+# =========================
 *.manifest
 *.spec
 
-# PyTorch and HuggingFace caches
+# =========================
+# PyTorch and HuggingFace Caches
+# =========================
 .cache/
 torch_cache/
 transformers_cache/
 huggingface_hub/
 datasets_cache/
 
-# Model downloads and cache
-models/
+# =========================
+# Model Downloads and Cache (local only)
+# =========================
+# !IMPORTANT! Model files must be in runtime/ directory
+#models/
 *.safetensors
 *.bin
 *.pt
 *.pth
 *.ckpt
 
-# Generated outputs
+# =========================
+# Runtime Directories (Opencode Standard)
+# =========================
+runtime/
+runtime/logs/
+runtime/outputs/
+runtime/models/
+runtime/cache/
+# just to make sure
+outputs/
+logs/
+models/
+cache/
+tmp/
+
+# =========================
+# Generated Outputs (deprecated, use runtime/outputs/)
+# =========================
 outputs/
 generated_*.png
 edited_*.png
 inpainted_*.png
 *.log
 
-# Gradio specific
+# =========================
+# Gradio Specific
+# =========================
 gradio_cached_examples/
 *.gradio
 
+# =========================
 # Jupyter Notebook
+# =========================
 .ipynb_checkpoints
 
-# Environment variables
+# =========================
+# Environment Variables
+# =========================
 .env
 .env.local
 .env.*.local
 
-# IDE and editor files
+# =========================
+# IDE and Editor Files
+# =========================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS specific
+# =========================
+# OS Specific
+# =========================
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
-.Trashes
+.Trashes/
 ehthumbs.db
 Thumbs.db
 
-# Logs
-logs/
-*.log
-*.out
-*.err
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.temp
-
-# Configuration overrides (keep templates, ignore local overrides)
+# =========================
+# Configuration Overrides
+# =========================
 config/local_*.yaml
 config/local_*.json
 *.overrides.yaml
 
-# Testing and coverage
-.coverage
+# =========================
+# Package Files
+# =========================
+*.zip
+*.tar.gz
+*.rar
+
+# =========================
+# Performance and Profiling
+# =========================
+*.prof
+*.lprof
+.profile
+
+# =========================
+# Database
+# =========================
+*.db
+*.sqlite
+*.sqlite3
+
+# =========================
+# Documentation Build
+# =========================
+docs/_build/
+site/
+
+# =========================
+# Large Files (Git LFS Candidates)
+# =========================
+*.large
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# =========================
+# Security
+# =========================
+*.key
+*.pem
+*.crt
+*.p12
+
+# =========================
+# Local Development (source code only)
+# =========================
+local/
+dev/
+test_*.py
+debug_*.py
+
+# =========================
+# Experimental Features
+# =========================
+experimental/
+sandbox/
+
+# =========================
+# Monitoring and Analytics
+# =========================
+monitoring/
+metrics/
+
+# =========================
+# Production and CI Artifacts
+# =========================
+artifacts/
+build/
+coverage/
 .pytest_cache/
+
+# =========================
+# Backup and Temporary
+# =========================
+*.bak
+*.backup
+*.old
+*.orig
+tmp/
+temp/
+*.temp
 .tox/
 coverage.xml
 *.cover
