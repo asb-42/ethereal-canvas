@@ -1,10 +1,53 @@
 # User Guide
 
-## Installation (Pinokio)
+## Installation
 
-1. Clone the repository
-2. Run `scripts/install.sh` to set up the environment and download the model
-3. Launch the application with `scripts/run.sh`
+### End User (Pinokio One-Click Installer)
+
+Ethereal Canvas is designed to be installed **directly from the Pinokio platform**. There is no need to manually clone or configure the repository.
+
+1. Open the **Pinokio application** on your system.
+2. Navigate to the **Pinokio Apps catalog**.
+3. Locate **"Ethereal Canvas"** and click **"Install"** or **"One-Click Installer"** button.
+4. Wait while Pinokio downloads the app, sets up all dependencies, and configures the environment automatically.
+5. Once installation completes, **launch Ethereal Canvas directly from within Pinokio**.
+
+> **Note:** The One-Click Installer handles all system setup, including Python environments, required libraries, and runtime configuration.
+
+### Developer Setup (Optional)
+
+If you intend to **inspect, modify, or contribute** to the codebase, you can set up a local development environment.
+
+1. Clone the repository from GitHub:
+
+```bash
+git clone https://github.com/asb-42/ethereal-canvas.git
+```
+
+2. Enter the repository directory:
+
+```bash
+cd ethereal-canvas
+```
+
+3. Set up a Python virtual environment (venv or conda):
+
+```bash
+# Example using venv
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install required dependencies
+pip install -r requirements.txt
+```
+
+4. Launch the application locally for testing:
+
+```bash
+python run_ethereal_canvas.py
+```
+
+**Important:** This workflow is intended for developers only. End users should always use the Pinokio One-Click Installer.
 
 ## Launching the App
 
