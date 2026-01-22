@@ -36,7 +36,8 @@ class ImageEditBackend:
         
         try:
             import torch
-            from diffusers import QwenImageEditPlusPipeline
+            from diffusers import DiffusionPipeline
+            # QwenImageEditPlusPipeline doesn't exist, use standard pipeline
         except ImportError as e:
             print(f"Failed to import required dependencies: {e}")
             print("Using stub implementation...")
@@ -48,8 +49,8 @@ class ImageEditBackend:
         print(f"Cache directory: {self.cache_dir}")
         
         try:
-            # Load the image editing pipeline
-            self.pipeline = QwenImageEditPlusPipeline.from_pretrained(
+            # Load the image editing pipeline using standard DiffusionPipeline
+            self.pipeline = DiffusionPipeline.from_pretrained(
                 self.model_name,
                 cache_dir=str(self.cache_dir),
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,

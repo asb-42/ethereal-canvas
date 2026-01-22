@@ -39,9 +39,9 @@ def create_backend(model_id: str, model_config: Dict[str, Any]) -> GenerationBac
     
     return backend_class(model_id, **backend_config)
 
-# Auto-register all backend classes
-def _auto_register_backends() -> None:
-    """Auto-discover and register backend classes."""
+# Lazy registration function - call only when needed
+def register_all_backends() -> None:
+    """Register all available backend classes."""
     try:
         # Import and register all backend modules
         from ..backends import text_to_image, image_edit, image_inpaint
@@ -49,8 +49,6 @@ def _auto_register_backends() -> None:
         register_backend("text-to-image", text_to_image.TextToImageBackend)
         register_backend("image-edit", image_edit.ImageEditBackend)
         register_backend("image-inpaint", image_inpaint.ImageInpaintBackend)
+        print("✅ All backends registered successfully")
     except ImportError as e:
-        print(f"Warning: Failed to auto-register backends: {e}")
-
-# Auto-register on import
-_auto_register_backends()
+        print(f"Warning: Failed to register backends: {e}")

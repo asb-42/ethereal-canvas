@@ -19,7 +19,19 @@ except ImportError:
     
     class GenerationBackend(ABC):
         @abstractmethod
-        def generate(self, prompt: str, **kwargs):
+        def load(self) -> None:
+            pass
+        
+        @abstractmethod
+        def generate(self, **kwargs):
+            pass
+        
+        @abstractmethod
+        def cleanup(self) -> None:
+            pass
+        
+        @abstractmethod
+        def get_model_info(self) -> dict:
             pass
 
 # Import runtime utilities
