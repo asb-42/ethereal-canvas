@@ -10,6 +10,18 @@ from pathlib import Path
 import torch
 from datetime import datetime
 
+# Import base backend class
+try:
+    from modules.models.base import GenerationBackend
+except ImportError:
+    print("Warning: GenerationBackend not available, creating fallback")
+    from abc import ABC, abstractmethod
+    
+    class GenerationBackend(ABC):
+        @abstractmethod
+        def generate(self, prompt: str, **kwargs):
+            pass
+
 # Import runtime utilities
 try:
     from modules.runtime.paths import (
@@ -63,12 +75,12 @@ class SimpleLogger:
     def error(self, message: str, **kwargs):
         print(f"[{self.name}] ERROR: {message}")
         for key, value in kwargs.items():
-            print(f"[self.name}] {key}: {value}")
+            print(f"[{self.name}] {key}: {value}")
     
     def success(self, operation: str, **kwargs):
         print(f"[{self.name}] SUCCESS: {operation}")
         for key, value in kwargs.items():
-            print(f"[self.name}] {key}: {value}")
+            print(f"[{self.name}] {key}: {value}")
 
 class TextToImageBackend(GenerationBackend):
     """Real text-to-image backend using Qwen models."""

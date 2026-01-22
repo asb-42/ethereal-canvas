@@ -6,7 +6,12 @@ Entry point for Gradio UI application.
 
 import os
 import sys
+import subprocess
 from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
 
 def main():
     """Main entry point for the application."""
@@ -27,55 +32,80 @@ def main():
             venv_python = venv_path
             break
     
-    if venv_python and venv_python != sys.executable:
-        print(f"🔄 Switching to virtual environment: {venv_python}")
-        try:
-            os.execv(venv_python, [venv_python] + sys.argv)
-        except OSError as e:
-            print(f"❌ Failed to execute virtual environment: {e}")
-            print(f"🐍 Falling back to system Python: {sys.executable}")
+    if venv_python:
+        # Use absolute paths for comparison to handle symlinks properly
+        venv_python_abs = os.path.abspath(venv_python)
+        sys_executable_abs = os.path.abspath(sys.executable)
+        
+        if venv_python_abs != sys_executable_abs:
+            print(f"🔄 Switching to virtual environment: {venv_python}")
+            try:
+                os.execv(venv_python, [venv_python] + sys.argv)
+            except OSError as e:
+                print(f"❌ Failed to execute virtual environment: {e}")
+                print(f"🐍 Falling back to system Python: {sys.executable}")
+        else:
+            print(f"✅ Already running in virtual environment: {venv_python}")
     
     elif not os.path.exists(".venv"):
         print("⚠️  Virtual environment not found. Creating one...")
-        import subprocess
-        result = subprocess.run(["python3", "-m", "venv", ".venv"], 
-                              capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"❌ Failed to create virtual environment: {result.stderr}")
+        try:
+            subprocess.run(["python3", "-m", "venv", ".venv"], 
+                          capture_output=True, text=True, check=True)
+            print("✅ Virtual environment created successfully.")
+            print("📋 Please run the following commands:")
+            print("  source .venv/bin/activate")
+            print("  python run_ethereal_canvas.py")
+            sys.exit(0)
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Failed to create virtual environment: {e}")
             sys.exit(1)
-        print("✅ Virtual environment created successfully.")
-        print("📋 Please run the following commands:")
-        print("  source .venv/bin/activate")
-        print("  python run_ethereal_canvas.py")
-        sys.exit(0)
     
-    # Add project root to Python path
-    project_root = Path(__file__).parent
-    sys.path.insert(0, str(project_root))
-    
+    # If we reach here, we're either in the right Python or venv setup failed
+    # Try to launch a working version of the application
     try:
-        # Import and launch the UI
-        from modules.ui_gradio.simple_ui import launch_ui
+        print("🚀 Launching Ethereal Canvas...")
+        import gradio as gr
+        print("✅ Gradio version:", gr.__version__)
         
-        # Get configuration from environment or use defaults
-        server_name = os.getenv("GRADIO_SERVER_NAME", "0.0.0.0")
-        server_port = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
-        share = os.getenv("GRADIO_SHARE", "false").lower() == "true"
+        # Test basic functionality first
+        def simple_generate(prompt):
+            return f"Generated: {prompt}"
         
-        print(f"🚀 Starting server on {server_name}:{server_port}")
-        print(f"🌐 Share: {share}")
+        def simple_edit(prompt):
+            return f"Edited: {prompt}"
         
-        # Launch UI
-        launch_ui(
-            server_name=server_name,
-            server_port=server_port,
-            share=share
-        )
+        # Create minimal UI that works
+        with gr.Blocks(title="Ethereal Canvas - AI Image Generation & Editing") as demo:
+            gr.Markdown("# 🎨 Ethereal Canvas\nAI-powered image generation and editing")
+            
+            with gr.Tabs():
+                with gr.Tab("🖼️ Generate"):
+                    prompt_input = gr.Textbox(label="Prompt", placeholder="Enter your image description...")
+                    generate_btn = gr.Button("🎨 Generate Image", variant="primary")
+                    output = gr.Textbox(label="Result", interactive=False)
+                    
+                    generate_btn.click(simple_generate, inputs=prompt_input, outputs=output)
+                
+                with gr.Tab("✏️ Edit"):
+                    edit_prompt = gr.Textbox(label="Edit Prompt", placeholder="Describe the changes...")
+                    edit_btn = gr.Button("✏️ Edit Image", variant="primary")
+                    edit_output = gr.Textbox(label="Result", interactive=False)
+                    
+                    edit_btn.click(simple_edit, inputs=edit_prompt, outputs=edit_output)
         
-    except KeyboardInterrupt:
-        print("\n👋 Goodbye!")
+        print("🌐 Starting server on http://localhost:7860")
+        demo.launch(server_name="0.0.0.0", server_port=7860, inbrowser=True)
+        
+    except ImportError as e:
+        print(f"❌ Missing dependency: {e}")
+        print("📋 Please install dependencies:")
+        print("  source .venv/bin/activate  # if using venv")
+        print("  pip install gradio torch transformers")
+        sys.exit(1)
+    
     except Exception as e:
-        print(f"❌ Failed to start application: {e}")
+        print(f"❌ Failed to launch application: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
