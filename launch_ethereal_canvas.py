@@ -15,6 +15,13 @@ def log_message(message: str, level: str = "INFO"):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {level}: {message}")
 
+def setup_sequential_downloads():
+    """Set up environment for sequential downloads to prevent corruption."""
+    import os
+    os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"  # Disable parallel transfer
+    os.environ["HF_HUB_DOWNLOAD_RETRY"] = "3"  # Retry downloads
+    log_message("✅ Configured sequential downloads")
+
 def check_dependencies():
     """Check if required dependencies are available."""
     missing_deps = []
@@ -43,6 +50,9 @@ def check_dependencies():
         log_message(f"Missing dependencies: {', '.join(missing_deps)}", "ERROR")
         log_message("Please install: pip install -r requirements.txt", "ERROR")
         return False
+    
+    # Set up sequential downloads
+    setup_sequential_downloads()
     
     return True
 
