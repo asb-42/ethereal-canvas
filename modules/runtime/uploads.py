@@ -33,5 +33,5 @@ def cleanup_upload(path: Path) -> None:
     """Clean up uploaded file from runtime/tmp/."""
     try:
         path.unlink(missing_ok=True)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[uploads] Warning: Failed to cleanup upload {path}: {e}")

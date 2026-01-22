@@ -115,8 +115,8 @@ class ImageEditBackend:
                     self.pipeline = self.pipeline.to("cpu")
                 import torch
                 torch.cuda.empty_cache()
-            except:
-                pass
+            except Exception as e:
+                print(f"[edit_backend] Warning: Failed to cleanup GPU memory: {e}")
         
         self.loaded = False
         self.pipeline = None
