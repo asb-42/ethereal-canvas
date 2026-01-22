@@ -9,6 +9,7 @@ transformers
 diffusers
 accelerate
 safetensors
+huggingface_hub
 
 # UI
 gradio
