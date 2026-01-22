@@ -61,26 +61,6 @@ class SimpleLogger:
         print(f"[{self.name}] SUCCESS: {operation}")
         for key, value in kwargs.items():
             print(f"[{self.name}] {key}: {value}")
-    
-    def info(self, message: str, **kwargs):
-        print(f"[{self.name}] INFO: {message}")
-        for key, value in kwargs.items():
-            print(f"[{self.name}] {key}: {value}")
-    
-    def warning(self, message: str, **kwargs):
-        print(f"[{self.name}] WARNING: {message}")
-        for key, value in kwargs.items():
-            print(f"[{self.name}] {key}: {value}")
-    
-    def error(self, message: str, **kwargs):
-        print(f"[{self.name}] ERROR: {message}")
-        for key, value in kwargs.items():
-            print(f"[{self.name}] {key}: {value}")
-    
-    def success(self, operation: str, **kwargs):
-        print(f"[{self.name}] SUCCESS: {operation}")
-        for key, value in kwargs.items():
-            print(f"[{self.name}] {key}: {value}")
 
 class TextToImageBackend(GenerationBackend):
     """Real text-to-image backend using Qwen models."""
@@ -92,10 +72,7 @@ class TextToImageBackend(GenerationBackend):
         self.device = "cuda" if self._check_cuda() else "cpu"
         
         # Initialize logger
-        try:
-            self.logger = RuntimeLogger("t2i_backend")
-        except ImportError:
-            self.logger = None
+        self.logger = SimpleLogger("t2i_backend")
         
         print(f"🎨 TextToImageBackend initialized: {model_name}")
     
@@ -192,7 +169,8 @@ class TextToImageBackend(GenerationBackend):
             return self._generate_stub(prompt)
         
         finally:
-            pass
+            if self.logger:
+                self.logger.info("Generation attempt completed")
     
     def _generate_stub(self, prompt: str) -> str:
         """Fallback stub implementation when models are not available."""
@@ -272,8 +250,9 @@ class TextToImageBackend(GenerationBackend):
                 # Move pipeline to CPU to free GPU memory
                 self.pipeline = self.pipeline.to("cpu")
                 torch.cuda.empty_cache()
-            except:
-                pass
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Failed to move pipeline to CPU: {e}")
         
         if self.logger:
             self.logger.info("T2I backend cleanup completed")
