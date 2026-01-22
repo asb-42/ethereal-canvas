@@ -6,6 +6,16 @@ runtime/outputs/
 runtime/models/
 runtime/cache/
 
+# Model directories (including downloaded models)
+models/
+*.safetensors
+*.bin
+*.ckpt
+*.pth
+
+# Incomplete downloads
+*.incomplete
+
 # Python artifacts
 __pycache__/
 *.pyc
