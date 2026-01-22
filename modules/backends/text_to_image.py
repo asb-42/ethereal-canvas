@@ -81,20 +81,44 @@ class TextToImageBackend(GenerationBackend):
         self.model_name = model_name
         self.loaded = False
         self.pipeline = None
-        self.device = "cuda" if self._check_cuda() else "cpu"
+        self.device = self._get_optimal_device()
         
         # Initialize logger
         self.logger = SimpleLogger("t2i_backend")
         
         print(f"🎨 TextToImageBackend initialized: {model_name}")
+        print(f"🔧 Using device: {self.device}")
     
-    def _check_cuda(self) -> bool:
-        """Check if CUDA is available."""
+    def _get_optimal_device(self) -> str:
+        """Get optimal device for model loading."""
         try:
             import torch
-            return torch.cuda.is_available()
+            
+            # Check CUDA availability and memory
+            if torch.cuda.is_available():
+                try:
+                    # Check if GPU has enough memory (at least 4GB)
+                    gpu_memory = torch.cuda.get_device_properties(0).total_memory
+                    gpu_memory_gb = gpu_memory / (1024**3)
+                    print(f"🎮 GPU detected: {gpu_memory_gb:.1f}GB VRAM")
+                    if gpu_memory_gb >= 4:
+                        return "cuda"
+                    else:
+                        print("⚠️  GPU has insufficient memory, using CPU")
+                        return "cpu"
+                except:
+                    print("⚠️  Could not determine GPU memory, using CPU")
+                    return "cpu"
+            else:
+                print("💻 No GPU detected, using CPU")
+                return "cpu"
         except ImportError:
-            return False
+            print("⚠️  PyTorch not available, using CPU")
+            return "cpu"
+    
+    def _check_cuda(self) -> bool:
+        """Check if CUDA is available (legacy method)."""
+        return self.device == "cuda"
     
     def load(self) -> None:
         """Load Qwen text-to-image model."""
@@ -117,17 +141,15 @@ class TextToImageBackend(GenerationBackend):
             # Force sequential download to avoid progress corruption
             import os
             os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"  # Disable parallel transfer
-            os.environ["HF_DOWNLOAD_TRY_EXPERIMENTAL_HUB_EXPERIMENTAL"] = "0"  # Disable experimental transfers
+            os.environ["HF_HUB_DOWNLOAD_RETRY"] = "3"  # Retry downloads
             
+            # Use basic parameters without variant to avoid fp16 issues
             self.pipeline = DiffusionPipeline.from_pretrained(
                 self.model_name,
                 cache_dir=str(QWEN_T2I_CACHE),
-                dtype=torch.float16 if self.device == "cuda" else torch.float32,  # Use dtype instead of torch_dtype
-                variant="fp16" if self.device == "cuda" else None,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 use_safetensors=True,
-                local_files_only=False,
-                resume_download=True,
-                force_download=False
+                local_files_only=False
             )
             
             if self.device == "cuda":
@@ -144,7 +166,29 @@ class TextToImageBackend(GenerationBackend):
             self.loaded = True  # Still mark as loaded to avoid repeated attempts
         
         except Exception as e:
-            self.logger.error(f"Failed to load T2I model: {e}")
+            error_msg = str(e)
+            self.logger.error(f"Failed to load T2I model: {error_msg}")
+            
+            # Handle specific errors with helpful messages
+            if "variant=fp16" in error_msg:
+                self.logger.info("💡 Tip: The model doesn't support fp16 variant, using basic loading...")
+                # Try again without variant
+                try:
+                    self.logger.info("🔄 Retrying with basic parameters...")
+                    self.pipeline = DiffusionPipeline.from_pretrained(
+                        self.model_name,
+                        cache_dir=str(QWEN_T2I_CACHE),
+                        torch_dtype=torch.float32,
+                        use_safetensors=True,
+                        local_files_only=False
+                    )
+                    self.loaded = True
+                    load_time = time.time() - start_time
+                    self.logger.info(f"✅ T2I model loaded successfully in {load_time:.2f}s (fallback)")
+                    return
+                except Exception as retry_e:
+                    self.logger.error(f"Fallback also failed: {retry_e}")
+            
             self.logger.info("Falling back to stub implementation...")
             self.loaded = True
     
@@ -159,7 +203,7 @@ class TextToImageBackend(GenerationBackend):
         try:
             self.logger.info(f"Generating image for prompt: {prompt[:50]}...")
             
-            # Generate image with proper autocast
+            # Generate image with proper autocast (CPU compatibility)
             if self.device == "cuda":
                 with torch.autocast("cuda"):
                     result = self.pipeline(
@@ -169,6 +213,7 @@ class TextToImageBackend(GenerationBackend):
                         num_images_per_prompt=1
                     )
             else:
+                # CPU doesn't support autocast, use direct pipeline call
                 result = self.pipeline(
                     prompt,
                     num_inference_steps=20,
