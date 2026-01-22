@@ -113,14 +113,21 @@ class TextToImageBackend(GenerationBackend):
             self.logger.info(f"Using device: {self.device}")
             self.logger.info(f"Cache directory: {QWEN_T2I_CACHE}")
             
-            # Load pipeline with proper caching and correct parameters
+            # Load pipeline with proper caching and sequential downloads
+            # Force sequential download to avoid progress corruption
+            import os
+            os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"  # Disable parallel transfer
+            os.environ["HF_DOWNLOAD_TRY_EXPERIMENTAL_HUB_EXPERIMENTAL"] = "0"  # Disable experimental transfers
+            
             self.pipeline = DiffusionPipeline.from_pretrained(
                 self.model_name,
                 cache_dir=str(QWEN_T2I_CACHE),
-                torch_dtype=torch.float16,
+                dtype=torch.float16 if self.device == "cuda" else torch.float32,  # Use dtype instead of torch_dtype
                 variant="fp16" if self.device == "cuda" else None,
                 use_safetensors=True,
-                local_files_only=False
+                local_files_only=False,
+                resume_download=True,
+                force_download=False
             )
             
             if self.device == "cuda":
