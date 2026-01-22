@@ -151,6 +151,8 @@ class TextToImageBackend(GenerationBackend):
             import os
             os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"  # Disable parallel transfer
             os.environ["HF_HUB_DOWNLOAD_RETRY"] = "3"  # Retry downloads
+            os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"  # Disable telemetry
+            os.environ["HUGGINGFACE_HUB_DISABLE_PROGRESS_BARS"] = "1"  # Disable conflicting progress bars
             
             # Use QwenImagePipeline for optimal Qwen model compatibility
             self.pipeline = QwenImagePipeline.from_pretrained(
