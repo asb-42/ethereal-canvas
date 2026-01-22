@@ -48,6 +48,9 @@ class EtherealCanvasUI:
             self.backend_adapter.load()
             return True, "Backend initialized successfully"
         except Exception as e:
+            print(f"Backend initialization error: {e}")
+            # Continue with None backend - will work in stub mode
+            self.backend_adapter = None
             return False, f"Failed to initialize backend: {str(e)}"
     
     def _log_message(self, message: str, status: str = "INFO"):
@@ -55,7 +58,7 @@ class EtherealCanvasUI:
         timestamp = datetime.now().strftime("%H:%M:%S")
         return f"[{timestamp}] {status}: {message}"
     
-    def generate_t2i(self, prompt: str, seed: int = None):
+    def generate_t2i(self, prompt: str, seed: int | None = None):
         """Generate image from text prompt."""
         if self.is_processing:
             return None, "⚠️ Another task is running. Please wait...", "error"
@@ -66,20 +69,28 @@ class EtherealCanvasUI:
             # Log start
             log_msg = self._log_message(f"Starting T2I generation: {prompt[:50]}...", "INFO")
             
-            # Execute generation
-            if seed is not None and seed > 0:
-                result = execute_task("generate", prompt, seed=seed)
+            # Execute generation using adapter if available, otherwise fallback
+            if self.backend_adapter:
+                result = self.backend_adapter.generate(prompt)
             else:
-                result = execute_task("generate", prompt)
+                # Fallback to simple task runner
+                if seed is not None and seed > 0:
+                    result = execute_task("generate", prompt, seed=seed)
+                else:
+                    result = execute_task("generate", prompt)
             
             # Get actual image path
-            if os.path.exists(result):
+            if result and os.path.exists(result):
+                image_result = result
+                success_msg = self._log_message(f"T2I generation completed: {result}", "SUCCESS")
+            elif result and result.endswith('.png'):
+                # Check if result is a valid path even if file doesn't exist yet (stub mode)
                 image_result = result
                 success_msg = self._log_message(f"T2I generation completed: {result}", "SUCCESS")
             else:
-                # Fallback for stub mode - create a dummy image
+                # No valid image path
                 image_result = None
-                success_msg = self._log_message(f"T2I generation completed (stub mode): {result}", "SUCCESS")
+                success_msg = self._log_message(f"T2I generation failed: {result}", "ERROR")
             
             return image_result, success_msg, "success"
             
@@ -90,7 +101,7 @@ class EtherealCanvasUI:
         finally:
             self.is_processing = False
     
-    def edit_i2i(self, image_file, prompt: str, seed: int = None):
+    def edit_i2i(self, image_file, prompt: str, seed: int | None = None):
         """Edit image based on prompt."""
         if self.is_processing:
             return None, "⚠️ Another task is running. Please wait...", "error"
@@ -107,11 +118,15 @@ class EtherealCanvasUI:
             # Log start
             log_msg = self._log_message(f"Starting I2I edit: {prompt[:50]}...", "INFO")
             
-            # Execute edit
-            if seed is not None and seed > 0:
-                result = execute_task("edit", prompt, input_path=image_path, seed=seed)
+            # Execute edit using adapter if available, otherwise fallback
+            if self.backend_adapter:
+                result = self.backend_adapter.edit(prompt, image_path)
             else:
-                result = execute_task("edit", prompt, input_path=image_path)
+                # Fallback to simple task runner
+                if seed is not None and seed > 0:
+                    result = execute_task("edit", prompt, input_path=image_path, seed=seed)
+                else:
+                    result = execute_task("edit", prompt, input_path=image_path)
             
             # Get actual image path
             if os.path.exists(result):
@@ -133,26 +148,32 @@ class EtherealCanvasUI:
     
     def get_system_info(self):
         """Get system and backend information."""
-        try:
-            model_info = get_model_info() if self.backend_adapter else {}
-            return {
-                "Backend Status": "✅ Ready" if self.backend_adapter else "❌ Failed",
-                "Models": str(model_info) if model_info else "Not loaded",
-                "Processing": "🔄 Busy" if self.is_processing else "✅ Idle"
-            }
-        except Exception as e:
-            return {
-                "Backend Status": f"❌ Error: {str(e)}",
-                "Models": "Unknown",
-                "Processing": "❓ Unknown"
-            }
+            try:
+                if self.backend_adapter:
+                    model_info = self.backend_adapter.get_model_info()
+                    backend_status = "✅ Ready"
+                else:
+                    model_info = "Not loaded (using stub mode)"
+                    backend_status = "⚠️ Stub Mode"
+                
+                return {
+                    "Backend Status": backend_status,
+                    "Models": str(model_info),
+                    "Processing": "🔄 Busy" if self.is_processing else "✅ Idle"
+                }
+            except Exception as e:
+                return {
+                    "Backend Status": f"❌ Error: {str(e)}",
+                    "Models": "Unknown",
+                    "Processing": "❓ Unknown"
+                }
     
     def create_ui(self):
         """Create the Gradio UI."""
         # Create demo without theme/css in constructor (move to launch for Gradio 6.0+)
-        demo = gr.Blocks(
+        with gr.Blocks(
             title="Ethereal Canvas - AI Image Generation & Editing"
-        )
+        ) as demo:
             
             # Header
             gr.Markdown("""
@@ -327,7 +348,7 @@ class EtherealCanvasUI:
                 fn=handle_generate,
                 inputs=[prompt_input, seed_input],
                 outputs=[t2i_output, t2i_log, t2i_download, generate_btn],
-                show_progress=True
+                show_progress="minimal"
             ).then(
                 fn=reset_buttons,
                 outputs=[generate_btn, edit_btn]
@@ -337,7 +358,7 @@ class EtherealCanvasUI:
                 fn=handle_edit,
                 inputs=[input_image, edit_prompt, edit_seed],
                 outputs=[edit_output, edit_log, edit_download, edit_btn],
-                show_progress=True
+                show_progress="minimal"
             ).then(
                 fn=reset_buttons,
                 outputs=[generate_btn, edit_btn]
@@ -345,14 +366,14 @@ class EtherealCanvasUI:
             
             # Initial system status update
             # Note: demo.load() moved to .ready() in newer Gradio versions
-            try:
-                demo.load(
-                    fn=self.get_system_info,
-                    outputs=[system_info]
-                )
-            except AttributeError:
-                # Fallback for newer Gradio versions
-                pass
+        try:
+            demo.load(
+                fn=self.get_system_info,
+                outputs=system_info
+            )
+        except AttributeError:
+            # Fallback for newer Gradio versions
+            pass
         
         return demo
 
@@ -372,7 +393,6 @@ def launch_ui(server_name="0.0.0.0", server_port=7860, share=False):
         server_port=server_port,
         share=share,
         show_error=True,
-        show_tips=True,
         inbrowser=True
     )
 
