@@ -68,8 +68,7 @@ def download_qwen_model_sequential(model_name: str, cache_dir: Path) -> bool:
             cache_dir=str(cache_dir),
             resume_download=True,
             local_files_only=False,
-            max_workers=1,  # Force sequential
-            timeout=60
+            max_workers=1  # Force sequential
         )
         
         log_message(f"✅ Sequential download completed: {downloaded_path}")
@@ -87,10 +86,11 @@ def download_qwen_model_sequential(model_name: str, cache_dir: Path) -> bool:
             success_count = 0
             
             for file_info in repo_files[:10]:  # Limit to first 10 files for safety
-                file_url = f"https://huggingface.co/{model_name}/resolve/main/{file_info.rfilename}"
-                local_path = cache_dir / file_info.rfilename
+                file_path = file_info if isinstance(file_info, str) else file_info.path
+                file_url = f"https://huggingface.co/{model_name}/resolve/main/{file_path}"
+                local_path = cache_dir / file_path
                 
-                log_message(f"Downloading: {file_info.rfilename}")
+                log_message(f"Downloading: {file_path}")
                 if download_file_sequential(file_url, local_path):
                     success_count += 1
             
