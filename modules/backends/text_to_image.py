@@ -131,7 +131,16 @@ class TextToImageBackend(GenerationBackend):
         try:
             # Load dependencies
             import torch
-            from diffusers import DiffusionPipeline
+            try:
+                from diffusers import QwenImagePipeline
+                print("✅ Using QwenImagePipeline for Qwen model")
+            except ImportError:
+                try:
+                    from diffusers import DiffusionPipeline
+                    print("✅ Using DiffusionPipeline as fallback")
+                except ImportError:
+                    from diffusers.pipelines.pipeline_utils import DiffusionPipeline
+                    print("✅ Using DiffusionPipeline (alternate import)")
             
             self.logger.info(f"Loading T2I model: {self.model_name}")
             self.logger.info(f"Using device: {self.device}")
@@ -143,8 +152,8 @@ class TextToImageBackend(GenerationBackend):
             os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"  # Disable parallel transfer
             os.environ["HF_HUB_DOWNLOAD_RETRY"] = "3"  # Retry downloads
             
-            # Use basic parameters without variant to avoid fp16 issues
-            self.pipeline = DiffusionPipeline.from_pretrained(
+            # Use QwenImagePipeline for optimal Qwen model compatibility
+            self.pipeline = QwenImagePipeline.from_pretrained(
                 self.model_name,
                 cache_dir=str(QWEN_T2I_CACHE),
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
@@ -175,7 +184,7 @@ class TextToImageBackend(GenerationBackend):
                 # Try again without variant
                 try:
                     self.logger.info("🔄 Retrying with basic parameters...")
-                    self.pipeline = DiffusionPipeline.from_pretrained(
+                    self.pipeline = QwenImagePipeline.from_pretrained(
                         self.model_name,
                         cache_dir=str(QWEN_T2I_CACHE),
                         torch_dtype=torch.float32,
