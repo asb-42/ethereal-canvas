@@ -113,12 +113,14 @@ class TextToImageBackend(GenerationBackend):
             self.logger.info(f"Using device: {self.device}")
             self.logger.info(f"Cache directory: {QWEN_T2I_CACHE}")
             
-            # Load pipeline with proper caching
+            # Load pipeline with proper caching and correct parameters
             self.pipeline = DiffusionPipeline.from_pretrained(
                 self.model_name,
                 cache_dir=str(QWEN_T2I_CACHE),
                 torch_dtype=torch.float16,
-                safety_checker=None
+                variant="fp16" if self.device == "cuda" else None,
+                use_safetensors=True,
+                local_files_only=False
             )
             
             if self.device == "cuda":
@@ -150,8 +152,16 @@ class TextToImageBackend(GenerationBackend):
         try:
             self.logger.info(f"Generating image for prompt: {prompt[:50]}...")
             
-            # Generate image
-            with torch.autocast(self.device):
+            # Generate image with proper autocast
+            if self.device == "cuda":
+                with torch.autocast("cuda"):
+                    result = self.pipeline(
+                        prompt,
+                        num_inference_steps=20,
+                        guidance_scale=7.5,
+                        num_images_per_prompt=1
+                    )
+            else:
                 result = self.pipeline(
                     prompt,
                     num_inference_steps=20,
@@ -162,7 +172,9 @@ class TextToImageBackend(GenerationBackend):
             image = result.images[0]
             
             # Save image to runtime/outputs/
-            output_path = OUTPUTS_DIR / f"t2i_{timestamp()}.png"
+            from datetime import datetime
+            timestamp_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            output_path = OUTPUTS_DIR / f"t2i_{timestamp_str}.png"
             image.save(output_path)
             
             generation_time = time.time() - start_time
@@ -217,8 +229,12 @@ class TextToImageBackend(GenerationBackend):
             
             y_position = 50
             for line in text_lines:
-                text_width = draw.textlength(line) if line else 0
-                draw.text((50 - text_width) // 2, y_position, text, fill='black')
+                try:
+                    text_width = draw.textlength(line) if line else 0
+                    draw.text((50 - text_width) // 2, y_position, line, fill='black')
+                except:
+                    # Fallback for older PIL versions
+                    draw.text((50, y_position), line, fill='black')
                 y_position += 30
             
             draw.rectangle([10, 10, 492, 492], outline='black', width=2)
@@ -237,19 +253,31 @@ class TextToImageBackend(GenerationBackend):
     
     def get_model_info(self) -> dict:
         """Get model information."""
-        cache_stats = get_cache_usage() if 'get_cache_usage' in globals() else {}
+        # Simple cache info without external dependencies
+        cache_size = 0
+        cache_files = 0
+        try:
+            if QWEN_T2I_CACHE.exists():
+                for file_path in QWEN_T2I_CACHE.rglob("*"):
+                    if file_path.is_file():
+                        cache_size += file_path.stat().st_size
+                        cache_files += 1
+        except:
+            pass
+        
+        cache_stats = {"size_bytes": cache_size, "file_count": cache_files}
         
         model_info = {
             "model_name": self.model_name,
             "loaded": self.loaded,
             "device": self.device,
             "pipeline_type": "DiffusionPipeline" if self.pipeline else "stub",
-            "cache_stats": cache_stats.get("Qwen-Image-2512", {"size_bytes": 0, "file_count": 0}),
+            "cache_stats": cache_stats,
             "runtime_paths": {
                 "output_dir": str(OUTPUTS_DIR),
                 "cache_dir": str(CACHE_DIR),
                 "logs_dir": str(LOGS_DIR),
-                "tmp_dir": str(TMP_DIR)
+                "tmp_dir": str(TMP_DIR) if 'TMP_DIR' in globals() else "N/A"
             }
         }
         
