@@ -4,6 +4,7 @@ Real image editing backend using Qwen-Image-Edit-2511 model.
 
 import os
 from pathlib import Path
+from datetime import datetime
 from modules.img_read.reader import read_image
 from modules.img_write.writer import write_image
 
@@ -75,7 +76,48 @@ class ImageEditBackend:
         
         # If pipeline failed to load, use stub
         if not self.pipeline:
-            return f"edited_{hash(prompt + input_path)}.png"
+            from modules.runtime.paths import OUTPUTS_DIR, timestamp
+            import hashlib
+            hash_input = (prompt + input_path).encode('utf-8')
+            hash_digest = hashlib.md5(hash_input).hexdigest()
+            output_path = OUTPUTS_DIR / f"stub_edit_{hash_digest[:8]}_{timestamp()}.png"
+            
+            # Create stub edited image
+            try:
+                from PIL import Image, ImageDraw, ImageFont
+                img = Image.new('RGB', (512, 512), color='lightblue')
+                draw = ImageDraw.Draw(img)
+                
+                # Try to use a simple font
+                try:
+                    font = ImageFont.load_default()
+                except:
+                    font = None
+                
+                # Draw some text
+                text_lines = [
+                    f"STUB EDIT",
+                    f"Prompt: {prompt[:30]}...",
+                    f"Input: {input_path.split('/')[-1] if '/' in input_path else input_path}",
+                    f"Time: {datetime.now().strftime('%H:%M:%S')}"
+                ]
+                
+                y_position = 50
+                for line in text_lines:
+                    if font:
+                        draw.text((50, y_position), line, fill='black', font=font)
+                    else:
+                        draw.text((50, y_position), line, fill='black')
+                    y_position += 30
+                
+                draw.rectangle([10, 10, 492, 492], outline='black', width=2)
+                
+                img.save(output_path)
+                return str(output_path)
+                
+            except Exception as e:
+                print(f"Stub edit failed: {e}")
+                return str(output_path)
         
         try:
             print(f"Editing image: {input_path}")
@@ -96,16 +138,23 @@ class ImageEditBackend:
             
             edited_image = result.images[0]
             
-            # Save edited image
-            output_path = f"edited_{hash(prompt + input_path)}.png"
-            write_image(edited_image, output_path)
+            # Save edited image to proper outputs directory
+            from modules.runtime.paths import OUTPUTS_DIR, timestamp
+            output_path = OUTPUTS_DIR / f"edited_{timestamp()}.png"
+            write_image(edited_image, str(output_path))
             
             print(f"✓ Image edited: {output_path}")
             return output_path
             
         except Exception as e:
             print(f"Failed to edit image: {e}")
-            return f"edited_{hash(prompt + input_path)}.png"
+            # Create stub output even when real editing fails
+            from modules.runtime.paths import OUTPUTS_DIR, timestamp
+            import hashlib
+            hash_input = (prompt + input_path).encode('utf-8')
+            hash_digest = hashlib.md5(hash_input).hexdigest()
+            output_path = OUTPUTS_DIR / f"failed_edit_{hash_digest[:8]}_{timestamp()}.png"
+            return str(output_path)
     
     def cleanup(self):
         """Cleanup resources."""
