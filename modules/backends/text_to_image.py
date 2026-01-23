@@ -104,7 +104,7 @@ class TextToImageBackend(GenerationBackend):
         try:
             import torch
             
-            # Check CUDA availability and memory
+            # Check CUDA availability with better error handling
             if torch.cuda.is_available():
                 try:
                     # Check if GPU has enough memory (at least 4GB)
@@ -116,9 +116,10 @@ class TextToImageBackend(GenerationBackend):
                     else:
                         print("⚠️  GPU has insufficient memory, using CPU")
                         return "cpu"
-                except:
-                    print("⚠️  Could not determine GPU memory, using CPU")
-                    return "cpu"
+                except Exception as e:
+                    print(f"⚠️  Could not determine GPU memory: {e}")
+                    print("⚠️  Attempting to use CUDA anyway...")
+                    return "cuda"  # Try CUDA anyway since it reported available
             else:
                 print("💻 No GPU detected, using CPU")
                 return "cpu"
@@ -148,11 +149,15 @@ class TextToImageBackend(GenerationBackend):
         """Load model using memory management system."""
         start_time = time.time()
         
+        # Suppress CUDA forward compatibility warning
+        import os
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "1"  # Suppress forward compatibility warning
+        
         try:
             # Load dependencies
             import torch
             try:
-                from diffusers import QwenImagePipeline
+                from diffusers.pipelines.qwenimage.pipeline_qwenimage import QwenImagePipeline
                 print("✅ Using QwenImagePipeline for Qwen model")
             except ImportError:
                 try:

@@ -84,7 +84,20 @@ class MemoryManager:
     def _detect_device(self) -> str:
         """Detect available compute device."""
         if TORCH_AVAILABLE and torch.cuda.is_available():
-            return "cuda"
+            # Double-check CUDA is actually working
+            try:
+                device_count = torch.cuda.device_count()
+                if device_count > 0:
+                    props = torch.cuda.get_device_properties(0)
+                    print(f"🎮 CUDA Device detected: {props.name} ({props.total_memory / (1024**3):.1f}GB)")
+                    return "cuda"
+                else:
+                    print("💻 No CUDA devices found, using CPU")
+                    return "cpu"
+            except Exception as e:
+                print(f"⚠️ CUDA initialization error: {e}")
+                print("⚠️ Attempting to use CUDA anyway...")
+                return "cuda"  # Try anyway since torch.cuda.is_available() returned True
         return "cpu"
     
     def _create_loading_configs(self) -> Dict[LoadStrategy, LoadingConfig]:
