@@ -1,14 +1,24 @@
 """
-Real text-to-image backend using Qwen-Image-2512 model.
-Runtime-compliant with proper path management.
+Real text-to-image backend using Qwen-Image-2512 model with memory management.
+Runtime-compliant with proper path management and OOM prevention.
 """
 
 import os
 import sys
 import time
 from pathlib import Path
-import torch
 from datetime import datetime
+
+# Import memory management
+try:
+    from modules.memory import memory_manager, LoadStrategy
+    MEMORY_MANAGEMENT_AVAILABLE = True
+except ImportError:
+    print("Warning: Memory management not available, using standard loading")
+    MEMORY_MANAGEMENT_AVAILABLE = False
+
+# Import torch (lazy import)
+torch = None
 
 # Import base backend class
 try:
@@ -121,11 +131,21 @@ class TextToImageBackend(GenerationBackend):
         return self.device == "cuda"
     
     def load(self) -> None:
-        """Load Qwen text-to-image model."""
+        """Load the Qwen text-to-image model with memory management."""
         if self.loaded:
             self.logger.info("Model already loaded")
             return
         
+        start_time = time.time()
+        
+        # Use memory management if available
+        if MEMORY_MANAGEMENT_AVAILABLE:
+            return self._load_with_memory_management()
+        else:
+            return self._load_standard()
+    
+    def _load_with_memory_management(self) -> None:
+        """Load model using memory management system."""
         start_time = time.time()
         
         try:
@@ -142,26 +162,151 @@ class TextToImageBackend(GenerationBackend):
                     from diffusers.pipelines.pipeline_utils import DiffusionPipeline
                     print("✅ Using DiffusionPipeline (alternate import)")
             
-            self.logger.info(f"Loading T2I model: {self.model_name}")
+            self.logger.info(f"Loading T2I model with memory management: {self.model_name}")
             self.logger.info(f"Using device: {self.device}")
             self.logger.info(f"Cache directory: {QWEN_T2I_CACHE}")
             
-            # Load pipeline with proper caching and sequential downloads
             # Force sequential download to avoid progress corruption
             import os
-            os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"  # Disable parallel transfer
-            os.environ["HF_HUB_DOWNLOAD_RETRY"] = "3"  # Retry downloads
-            os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"  # Disable telemetry
-            os.environ["HUGGINGFACE_HUB_DISABLE_PROGRESS_BARS"] = "1"  # Disable conflicting progress bars
+            os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+            os.environ["HF_HUB_DOWNLOAD_RETRY"] = "3"
+            os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+            os.environ["HUGGINGFACE_HUB_DISABLE_PROGRESS_BARS"] = "1"
+            
+            # Define loading function for memory manager
+            def load_qwen_model(**kwargs):
+                return QwenImagePipeline.from_pretrained(
+                    self.model_name,
+                    cache_dir=str(QWEN_T2I_CACHE),
+                    **kwargs
+                )
+            
+            # Use memory manager to load with fallback strategies
+            try:
+                self.pipeline, config = memory_manager.load_model_with_fallback(
+                    model_name=self.model_name,
+                    load_fn=load_qwen_model,
+                    preferred_strategies=[
+                        LoadStrategy.FP16_FULL,
+                        LoadStrategy.FP8_OPTIMIZED,
+                        LoadStrategy.CPU_OFFLOAD
+                    ]
+                )
+                
+                # Apply post-loading optimizations
+                if hasattr(config, 'enable_attention_slicing') and config.enable_attention_slicing:
+                    self.pipeline.enable_attention_slicing()
+                    self.logger.info("✅ Enabled attention slicing")
+                
+                if hasattr(config, 'enable_xformers') and config.enable_xformers:
+                    try:
+                        self.pipeline.enable_xformers_memory_efficient_attention()
+                        self.logger.info("✅ Enabled xFormers optimization")
+                    except Exception as e:
+                        self.logger.info(f"xFormers not available: {e}")
+                
+                self.loaded = True
+                load_time = time.time() - start_time
+                strategy_name = config.strategy.value if hasattr(config, 'strategy') else 'unknown'
+                self.logger.info(f"✅ T2I model loaded successfully in {load_time:.2f}s using strategy: {strategy_name}")
+                
+            except Exception as e:
+                if memory_manager.is_oom_error(e):
+                    self.logger.error(f"OOM error even with memory management: {e}")
+                    # Try even more aggressive strategies
+                    self._load_with_aggressive_fallback()
+                else:
+                    raise e
+        
+        except ImportError as e:
+            self.logger.error(f"Failed to import required dependencies: {e}")
+            self.logger.info("Falling back to stub implementation...")
+            self.loaded = True
+        
+        except Exception as e:
+            error_msg = str(e)
+            self.logger.error(f"Failed to load T2I model with memory management: {error_msg}")
+            self.logger.info("Falling back to stub implementation...")
+            self.loaded = True
+    
+    def _load_with_aggressive_fallback(self) -> None:
+        """Load with most aggressive memory-saving strategies."""
+        try:
+            self.logger.info("Attempting aggressive memory-saving strategies...")
+            
+            import torch
+            from diffusers import QwenImagePipeline
+            
+            # Try sequential offload first
+            try:
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+                self.pipeline = QwenImagePipeline.from_pretrained(
+                    self.model_name,
+                    cache_dir=str(QWEN_T2I_CACHE),
+                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                    use_safetensors=True,
+                    low_cpu_mem_usage=True
+                )
+                
+                # Enable all memory optimizations
+                self.pipeline.enable_sequential_cpu_offload()
+                self.pipeline.enable_attention_slicing()
+                
+                self.loaded = True
+                self.logger.info("✅ Loaded with aggressive memory optimizations")
+                
+            except Exception as e:
+                self.logger.error(f"Aggressive fallback failed: {e}")
+                raise e
+        
+        except Exception as e:
+            self.logger.error(f"All loading strategies failed: {e}")
+            self.loaded = True  # Prevent repeated attempts
+    
+    def _load_standard(self) -> None:
+        """Standard loading without memory management (fallback)."""
+        start_time = time.time()
+        
+        try:
+            # Load dependencies
+            import torch
+            try:
+                from diffusers import QwenImagePipeline
+                print("✅ Using QwenImagePipeline for Qwen model")
+            except ImportError:
+                try:
+                    from diffusers import DiffusionPipeline
+                    print("✅ Using DiffusionPipeline as fallback")
+                except ImportError:
+                    from diffusers.pipelines.pipeline_utils import DiffusionPipeline
+                    print("✅ Using DiffusionPipeline (alternate import)")
+            
+            self.logger.info(f"Loading T2I model (standard): {self.model_name}")
+            self.logger.info(f"Using device: {self.device}")
+            self.logger.info(f"Cache directory: {QWEN_T2I_CACHE}")
+            
+            # Force sequential download to avoid progress corruption
+            import os
+            os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+            os.environ["HF_HUB_DOWNLOAD_RETRY"] = "3"
+            os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+            os.environ["HUGGINGFACE_HUB_DISABLE_PROGRESS_BARS"] = "1"
             
             # Use QwenImagePipeline for optimal Qwen model compatibility
-            self.pipeline = QwenImagePipeline.from_pretrained(
-                self.model_name,
-                cache_dir=str(QWEN_T2I_CACHE),
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                use_safetensors=True,
-                local_files_only=False
-            )
+            if 'QwenImagePipeline' in globals():
+                self.pipeline = QwenImagePipeline.from_pretrained(
+                    self.model_name,
+                    cache_dir=str(QWEN_T2I_CACHE),
+                    **kwargs
+                )
+            else:
+                # Fallback to DiffusionPipeline
+                from diffusers import DiffusionPipeline
+                self.pipeline = DiffusionPipeline.from_pretrained(
+                    self.model_name,
+                    cache_dir=str(QWEN_T2I_CACHE),
+                    **kwargs
+                )
             
             if self.device == "cuda":
                 self.pipeline = self.pipeline.to("cuda")
@@ -174,32 +319,11 @@ class TextToImageBackend(GenerationBackend):
         except ImportError as e:
             self.logger.error(f"Failed to import required dependencies: {e}")
             self.logger.info("Falling back to stub implementation...")
-            self.loaded = True  # Still mark as loaded to avoid repeated attempts
+            self.loaded = True
         
         except Exception as e:
             error_msg = str(e)
             self.logger.error(f"Failed to load T2I model: {error_msg}")
-            
-            # Handle specific errors with helpful messages
-            if "variant=fp16" in error_msg:
-                self.logger.info("💡 Tip: The model doesn't support fp16 variant, using basic loading...")
-                # Try again without variant
-                try:
-                    self.logger.info("🔄 Retrying with basic parameters...")
-                    self.pipeline = QwenImagePipeline.from_pretrained(
-                        self.model_name,
-                        cache_dir=str(QWEN_T2I_CACHE),
-                        torch_dtype=torch.float32,
-                        use_safetensors=True,
-                        local_files_only=False
-                    )
-                    self.loaded = True
-                    load_time = time.time() - start_time
-                    self.logger.info(f"✅ T2I model loaded successfully in {load_time:.2f}s (fallback)")
-                    return
-                except Exception as retry_e:
-                    self.logger.error(f"Fallback also failed: {retry_e}")
-            
             self.logger.info("Falling back to stub implementation...")
             self.loaded = True
     

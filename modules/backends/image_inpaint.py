@@ -1,9 +1,18 @@
 """
-Real image inpainting backend using Qwen models.
+Real image inpainting backend using Qwen models with memory management.
 """
 
 import os
 from pathlib import Path
+
+# Import memory management
+try:
+    from modules.memory import memory_manager, LoadStrategy
+    MEMORY_MANAGEMENT_AVAILABLE = True
+except ImportError:
+    print("Warning: Memory management not available, using standard loading")
+    MEMORY_MANAGEMENT_AVAILABLE = False
+
 from modules.img_read.reader import read_image
 from modules.img_write.writer import write_image
 
@@ -30,10 +39,18 @@ class ImageInpaintBackend:
             return False
     
     def load(self):
-        """Load the Qwen image inpainting model."""
+        """Load the Qwen image inpainting model with memory management."""
         if self.loaded:
             return
         
+        # Use memory management if available
+        if MEMORY_MANAGEMENT_AVAILABLE:
+            return self._load_with_memory_management()
+        else:
+            return self._load_standard()
+    
+    def _load_with_memory_management(self):
+        """Load model using memory management system."""
         try:
             import torch
             from diffusers import QwenImageEditPlusPipeline
@@ -43,7 +60,103 @@ class ImageInpaintBackend:
             self.loaded = True
             return
         
-        print(f"Loading inpaint model: {self.model_name}")
+        print(f"Loading inpaint model with memory management: {self.model_name}")
+        print(f"Using device: {self.device}")
+        print(f"Cache directory: {self.cache_dir}")
+        
+        try:
+            # Define loading function for memory manager
+            def load_inpaint_model(**kwargs):
+                return QwenImageEditPlusPipeline.from_pretrained(
+                    self.model_name,
+                    cache_dir=str(self.cache_dir),
+                    **kwargs
+                )
+            
+            # Use memory manager to load with fallback strategies
+            self.pipeline, config = memory_manager.load_model_with_fallback(
+                model_name=self.model_name,
+                load_fn=load_inpaint_model,
+                preferred_strategies=[
+                    LoadStrategy.FP16_FULL,
+                    LoadStrategy.FP8_OPTIMIZED,
+                    LoadStrategy.CPU_OFFLOAD
+                ]
+            )
+            
+            # Apply post-loading optimizations
+            if hasattr(config, 'enable_attention_slicing') and config.enable_attention_slicing:
+                self.pipeline.enable_attention_slicing()
+                print("✓ Enabled attention slicing")
+            
+            if hasattr(config, 'enable_xformers') and config.enable_xformers:
+                try:
+                    self.pipeline.enable_xformers_memory_efficient_attention()
+                    print("✓ Enabled xFormers optimization")
+                except Exception as e:
+                    print(f"xFormers not available: {e}")
+            
+            self.loaded = True
+            strategy_name = config.strategy.value if hasattr(config, 'strategy') else 'unknown'
+            print(f"✓ Inpaint model loaded successfully using strategy: {strategy_name}")
+            
+        except Exception as e:
+            if memory_manager.is_oom_error(e):
+                print(f"OOM error even with memory management: {e}")
+                # Try even more aggressive strategies
+                self._load_with_aggressive_fallback()
+            else:
+                print(f"Failed to load inpaint model with memory management: {e}")
+                print("Falling back to stub implementation...")
+                self.loaded = True
+    
+    def _load_with_aggressive_fallback(self):
+        """Load with most aggressive memory-saving strategies."""
+        try:
+            print("Attempting aggressive memory-saving strategies...")
+            
+            import torch
+            from diffusers import QwenImageEditPlusPipeline
+            
+            # Try sequential offload first
+            try:
+                import os
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+                self.pipeline = QwenImageEditPlusPipeline.from_pretrained(
+                    self.model_name,
+                    cache_dir=str(self.cache_dir),
+                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                    use_safetensors=True,
+                    low_cpu_mem_usage=True
+                )
+                
+                # Enable all memory optimizations
+                self.pipeline.enable_sequential_cpu_offload()
+                self.pipeline.enable_attention_slicing()
+                
+                self.loaded = True
+                print("✓ Loaded with aggressive memory optimizations")
+                
+            except Exception as e:
+                print(f"Aggressive fallback failed: {e}")
+                raise e
+        
+        except Exception as e:
+            print(f"All loading strategies failed: {e}")
+            self.loaded = True  # Prevent repeated attempts
+    
+    def _load_standard(self):
+        """Standard loading without memory management (fallback)."""
+        try:
+            import torch
+            from diffusers import QwenImageEditPlusPipeline
+        except ImportError as e:
+            print(f"Failed to import required dependencies: {e}")
+            print("Using stub implementation...")
+            self.loaded = True
+            return
+        
+        print(f"Loading inpaint model (standard): {self.model_name}")
         print(f"Using device: {self.device}")
         print(f"Cache directory: {self.cache_dir}")
         
