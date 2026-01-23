@@ -15,11 +15,31 @@ def log_message(message: str, level: str = "INFO"):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {level}: {message}")
 
+def setup_cuda_environment():
+    """Set up CUDA environment to prevent initialization errors."""
+    import os
+    import warnings
+    
+    # Set environment variables BEFORE any torch imports
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+    os.environ["CUDA_MODULE_LOADING"] = "LAZY"
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,expandable_segments:True"
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    
+    # Filter warnings
+    warnings.filterwarnings("ignore", message=".*CUDA initialization.*forward compatibility.*")
+    warnings.filterwarnings("ignore", message=".*UserWarning: CUDA is not available.*")
+    warnings.filterwarnings("ignore", message=".*torch_dtype.*is deprecated.*")
+    
+    print("🔧 Applied CUDA environment fixes")
+
 def setup_sequential_downloads():
     """Set up environment for sequential downloads to prevent corruption."""
     import os
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"  # Disable parallel transfer
     os.environ["HF_HUB_DOWNLOAD_RETRY"] = "3"  # Retry downloads
+    os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"  # Disable telemetry
+    os.environ["HUGGINGFACE_HUB_DISABLE_PROGRESS_BARS"] = "1"  # Disable conflicting progress bars
     log_message("✅ Configured sequential downloads")
 
 def check_dependencies():
@@ -69,6 +89,12 @@ def check_port_available(port: int) -> bool:
 def launch_ui():
     """Launch the Gradio UI with comprehensive error handling."""
     log_message("🚀 Starting Ethereal Canvas...")
+    
+    # Apply CUDA fixes FIRST before any imports
+    setup_cuda_environment()
+    
+    # Set up sequential downloads
+    setup_sequential_downloads()
     
     # Check dependencies
     if not check_dependencies():
