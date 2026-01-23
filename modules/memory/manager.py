@@ -70,6 +70,9 @@ class MemoryManager:
     """
     
     def __init__(self):
+        # Apply CUDA fixes before device detection
+        self._apply_cuda_fixes()
+        
         self.device = self._detect_device()
         self.loading_configs = self._create_loading_configs()
         self.fallback_chain = [
@@ -80,6 +83,23 @@ class MemoryManager:
             LoadStrategy.SEQUENTIAL_OFFLOAD,
         ]
         self.current_config = None
+    
+    def _apply_cuda_fixes(self):
+        """Apply CUDA initialization fixes for PyTorch compatibility."""
+        import os
+        import warnings
+        
+        # Set environment variables to fix CUDA initialization
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+        os.environ["CUDA_MODULE_LOADING"] = "LAZY"
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,expandable_segments:True"
+        
+        # Suppress specific CUDA warnings
+        warnings.filterwarnings("ignore", message=".*CUDA initialization.*forward compatibility.*")
+        warnings.filterwarnings("ignore", message=".*UserWarning: CUDA is not available.*")
+        warnings.filterwarnings("ignore", message=".*torch_dtype.*is deprecated.*")
+        
+        print("🔧 Applied CUDA initialization fixes to memory manager")
         
     def _detect_device(self) -> str:
         """Detect available compute device."""

@@ -91,6 +91,10 @@ class TextToImageBackend(GenerationBackend):
         self.model_name = model_name
         self.loaded = False
         self.pipeline = None
+        
+        # Apply CUDA initialization fixes BEFORE device detection
+        self._apply_cuda_fixes()
+        
         self.device = self._get_optimal_device()
         
         # Initialize logger
@@ -98,6 +102,22 @@ class TextToImageBackend(GenerationBackend):
         
         print(f"🎨 TextToImageBackend initialized: {model_name}")
         print(f"🔧 Using device: {self.device}")
+    
+    def _apply_cuda_fixes(self):
+        """Apply CUDA initialization fixes for PyTorch 2.10.0+cu128 compatibility."""
+        import os
+        import warnings
+        
+        # Set environment variables to fix CUDA initialization
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+        os.environ["CUDA_MODULE_LOADING"] = "LAZY"  
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,expandable_segments:True"
+        
+        # Suppress specific CUDA warnings that are confusing
+        warnings.filterwarnings("ignore", message=".*CUDA initialization.*forward compatibility.*")
+        warnings.filterwarnings("ignore", message=".*UserWarning: CUDA is not available.*")
+        
+        print("🔧 Applied CUDA initialization fixes")
     
     def _get_optimal_device(self) -> str:
         """Get optimal device for model loading."""
