@@ -17,6 +17,14 @@ except ImportError:
     print("Warning: Memory management not available, using standard loading")
     MEMORY_MANAGEMENT_AVAILABLE = False
 
+# Import pipeline monitoring
+try:
+    from utils.pipeline_monitor import create_monitor, monitor_pipeline_step
+    MONITORING_AVAILABLE = True
+except ImportError:
+    print("Warning: Pipeline monitoring not available")
+    MONITORING_AVAILABLE = False
+
 # Import torch (lazy import)
 torch = None
 
@@ -367,17 +375,31 @@ class TextToImageBackend(GenerationBackend):
             self.logger.warning("Model not loaded or pipeline not available, using stub implementation")
             return self._generate_stub(prompt)
         
+        # Start monitoring
+        monitor = None
+        if MONITORING_AVAILABLE:
+            monitor = create_monitor(f"T2I-{self.device.upper()}")
+            monitor.start_monitoring(total_steps=20)
+        
         start_time = time.time()
         
         try:
             self.logger.info(f"Generating image for prompt: {prompt[:50]}...")
+            if monitor:
+                monitor.update_step("Loading torch and preparing generation")
             
             # Import torch for this method
             import torch
             
+            if monitor:
+                monitor.update_step("Setting up autocast context")
+            
             # Generate image with proper autocast (CPU compatibility)
             if self.device == "cuda":
                 with torch.autocast("cuda"):
+                    if monitor:
+                        monitor.update_step("Running pipeline inference")
+                    
                     result = self.pipeline(
                         prompt,
                         num_inference_steps=20,
@@ -385,6 +407,9 @@ class TextToImageBackend(GenerationBackend):
                         num_images_per_prompt=1
                     )
             else:
+                if monitor:
+                    monitor.update_step("Running pipeline inference (CPU mode)")
+                    
                 # CPU doesn't support autocast, use direct pipeline call
                 result = self.pipeline(
                     prompt,
@@ -393,13 +418,19 @@ class TextToImageBackend(GenerationBackend):
                     num_images_per_prompt=1
                 )
             
+            if monitor:
+                monitor.update_step("Processing pipeline results")
+            
             image = result.images[0]
             
             # Save image to runtime/outputs/
             from datetime import datetime
             timestamp_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             
-            # Ensure output directory exists
+# Ensure output directory exists
+            if monitor:
+                monitor.update_step("Saving generated image")
+            
             OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
             
             output_path = OUTPUTS_DIR / f"t2i_{timestamp_str}.png"
@@ -407,16 +438,20 @@ class TextToImageBackend(GenerationBackend):
             
             generation_time = time.time() - start_time
             
+            if monitor:
+                monitor.success(str(output_path))
+            
             self.logger.success("image_generation", {
                 "prompt": prompt[:50],
                 "output_path": str(output_path),
                 "generation_time": f"{generation_time:.2f}s"
             })
             
-            self.logger.info(f"✓ Image generated: {output_path}")
             return str(output_path)
             
         except Exception as e:
+            if monitor:
+                monitor.error(f"Pipeline execution failed: {e}", e)
             self.logger.error(f"Failed to generate image: {e}")
             return self._generate_stub(prompt)
         

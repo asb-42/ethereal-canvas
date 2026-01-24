@@ -19,6 +19,14 @@ except ImportError:
     print("Warning: Memory management not available, using standard loading")
     MEMORY_MANAGEMENT_AVAILABLE = False
 
+# Import pipeline monitoring
+try:
+    from utils.pipeline_monitor import create_monitor, monitor_pipeline_step
+    MONITORING_AVAILABLE = True
+except ImportError:
+    print("Warning: Pipeline monitoring not available")
+    MONITORING_AVAILABLE = False
+
 from modules.img_read.reader import read_image
 from modules.img_write.writer import write_image
 
@@ -193,8 +201,17 @@ class ImageEditBackend:
         if not self.loaded:
             self.load()
         
+        # Start monitoring
+        monitor = None
+        if MONITORING_AVAILABLE:
+            monitor = create_monitor(f"I2I-{self.device.upper()}")
+            monitor.start_monitoring(total_steps=20)
+        
         # If pipeline failed to load, use stub
         if not self.pipeline:
+            if monitor:
+                monitor.error("Pipeline not loaded, using stub")
+            
             from modules.runtime.paths import OUTPUTS_DIR, timestamp
             import hashlib
             hash_input = (prompt + input_path).encode('utf-8')
@@ -242,9 +259,15 @@ class ImageEditBackend:
             print(f"Editing image: {input_path}")
             print(f"Edit prompt: {prompt[:50]}...")
             
+            if monitor:
+                monitor.update_step("Loading input image")
+            
             # Load input image
             image_data = read_image(input_path)
             input_image = image_data.pixels  # Extract PIL Image from ImageData
+            
+            if monitor:
+                monitor.update_step("Setting up autocast context")
             
             # Generate edited image
             if torch and hasattr(torch, 'autocast'):
@@ -253,6 +276,9 @@ class ImageEditBackend:
                 # Fallback if torch.autocast not available
                 from contextlib import nullcontext
                 context_manager = nullcontext()
+            
+            if monitor:
+                monitor.update_step("Running Qwen-Edit pipeline inference")
             
             with context_manager:
                 # Qwen-Edit Pipeline expects specific parameters
@@ -267,17 +293,28 @@ class ImageEditBackend:
                 }
                 result = self.pipeline(**inputs)
             
+            if monitor:
+                monitor.update_step("Processing pipeline results")
+            
             edited_image = result.images[0]
             
             # Save edited image to proper outputs directory
+            if monitor:
+                monitor.update_step("Saving edited image")
+            
             from modules.runtime.paths import OUTPUTS_DIR, timestamp
             output_path = OUTPUTS_DIR / f"edited_{timestamp()}.png"
             write_image(edited_image, str(output_path))
+            
+            if monitor:
+                monitor.success(str(output_path))
             
             print(f"✓ Image edited: {output_path}")
             return output_path
             
         except Exception as e:
+            if monitor:
+                monitor.error(f"Image editing failed: {e}", e)
             print(f"Failed to edit image: {e}")
             # Create stub output even when real editing fails
             from modules.runtime.paths import OUTPUTS_DIR, timestamp

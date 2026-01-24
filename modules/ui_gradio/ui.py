@@ -19,14 +19,22 @@ sys.path.insert(0, str(project_root))
 from modules.backends.adapter import BackendAdapter
 from modules.job_runner.runner_simple import execute_task, get_model_info
 
+# Import pipeline monitoring
+try:
+    from utils.pipeline_monitor import ui_status_logger
+    MONITORING_AVAILABLE = True
+except ImportError:
+    print("Warning: Pipeline monitoring not available for UI")
+    MONITORING_AVAILABLE = False
+
 class EtherealCanvasUI:
     """Main UI class for Ethereal Canvas."""
     
-    def __init__(self):
-        """Initialize UI with backend adapter."""
+def __init__(self):
+        """Initialize the UI components."""
         self.backend_adapter = None
-        self.current_task = None
         self.is_processing = False
+        self.status_timer = None
         
         # Initialize backend
         self._initialize_backend()
@@ -167,6 +175,37 @@ class EtherealCanvasUI:
                 "Models": "Unknown",
                 "Processing": "❓ Unknown"
             }
+    
+    def get_status_updates(self):
+        """Get recent status updates from pipeline monitor."""
+        if MONITORING_AVAILABLE:
+            recent_messages = ui_status_logger.get_recent_messages(20)
+            return "\\n".join(recent_messages)
+        return "No monitoring available"
+    
+    def start_status_updates(self):
+        """Start periodic status updates."""
+        if self.status_timer:
+            return
+        
+        def update_status():
+            try:
+                if hasattr(self, 't2i_log_component') and MONITORING_AVAILABLE:
+                    status_text = self.get_status_updates()
+                    self.t2i_log_component.value = status_text
+            except Exception as e:
+                print(f"Status update error: {e}")
+        
+        # Start timer for updates every 2 seconds
+        self.status_timer = threading.Timer(2.0, update_status)
+        self.status_timer.daemon = True
+        self.status_timer.start()
+    
+    def stop_status_updates(self):
+        """Stop status updates."""
+        if self.status_timer:
+            self.status_timer.cancel()
+            self.status_timer = None
     
     def create_ui(self):
         """Create the Gradio UI."""
@@ -381,6 +420,7 @@ class EtherealCanvasUI:
 def launch_ui(server_name="0.0.0.0", server_port=7860, share=False):
     """Launch the Gradio UI."""
     ui = EtherealCanvasUI()
+    ui.start_status_updates()
     demo = ui.create_ui()
     
     print(f"🚀 Launching Ethereal Canvas UI...")
