@@ -148,25 +148,25 @@ class EtherealCanvasUI:
     
     def get_system_info(self):
         """Get system and backend information."""
-            try:
-                if self.backend_adapter:
-                    model_info = self.backend_adapter.get_model_info()
-                    backend_status = "✅ Ready"
-                else:
-                    model_info = "Not loaded (using stub mode)"
-                    backend_status = "⚠️ Stub Mode"
-                
-                return {
-                    "Backend Status": backend_status,
-                    "Models": str(model_info),
-                    "Processing": "🔄 Busy" if self.is_processing else "✅ Idle"
-                }
-            except Exception as e:
-                return {
-                    "Backend Status": f"❌ Error: {str(e)}",
-                    "Models": "Unknown",
-                    "Processing": "❓ Unknown"
-                }
+        try:
+            if self.backend_adapter:
+                model_info = self.backend_adapter.get_model_info()
+                backend_status = "✅ Ready"
+            else:
+                model_info = "Not loaded (using stub mode)"
+                backend_status = "⚠️ Stub Mode"
+            
+            return {
+                "Backend Status": backend_status,
+                "Models": str(model_info),
+                "Processing": "🔄 Busy" if self.is_processing else "✅ Idle"
+            }
+        except Exception as e:
+            return {
+                "Backend Status": f"❌ Error: {str(e)}",
+                "Models": "Unknown",
+                "Processing": "❓ Unknown"
+            }
     
     def create_ui(self):
         """Create the Gradio UI."""
