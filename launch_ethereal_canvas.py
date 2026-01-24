@@ -9,21 +9,20 @@ import time
 from pathlib import Path
 import traceback
 from datetime import datetime
+import warnings
 
-def log_message(message: str, level: str = "INFO"):
-    """Log message with timestamp."""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] {level}: {message}")
+# Set CUDA environment variables BEFORE any imports
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["CUDA_MODULE_LOADING"] = "LAZY"  
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,expandable_segments:True"
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 
-def setup_cuda_environment():
-    """Set up CUDA environment to prevent initialization errors."""
-    import os
-        import warnings
-        warnings.filterwarnings("ignore", message=".*UserWarning: CUDA is not available.*") 
-        warnings.filterwarnings("ignore", message=".*torch_dtype.*is deprecated.*")
-        warnings.filterwarnings("ignore", message=".*zero_cond_t.*")
-        warnings.filterwarnings("ignore", message=".*config.json.*")
-        warnings.filterwarnings("ignore", message=".*Getötet.*")
+# Import warnings suppression
+warnings.filterwarnings("ignore", message=".*UserWarning: CUDA is not available.*") 
+warnings.filterwarnings("ignore", message=".*torch_dtype.*is deprecated.*")
+warnings.filterwarnings("ignore", message=".*zero_cond_t.*")
+warnings.filterwarnings("ignore", message=".*config.json.*")
+warnings.filterwarnings("ignore", message=".*Getötet.*")
     
     print("🔧 Applied CUDA environment fixes")
 
