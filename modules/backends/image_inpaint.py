@@ -43,11 +43,8 @@ class ImageInpaintBackend:
         if self.loaded:
             return
         
-        # Use memory management if available
-        if MEMORY_MANAGEMENT_AVAILABLE:
-            return self._load_with_memory_management()
-        else:
-            return self._load_standard()
+        # Temporarily disable memory management to debug hanging issue
+        return self._load_standard()
     
     def _load_with_memory_management(self):
         """Load model using memory management system."""

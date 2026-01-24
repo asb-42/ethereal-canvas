@@ -124,7 +124,7 @@ class TextToImageBackend(GenerationBackend):
         try:
             import torch
             
-            # Check CUDA availability with better error handling
+            # Check CUDA availability and memory
             if torch.cuda.is_available():
                 try:
                     # Check if GPU has enough memory (at least 4GB)
@@ -136,15 +136,18 @@ class TextToImageBackend(GenerationBackend):
                     else:
                         print("⚠️  GPU has insufficient memory, using CPU")
                         return "cpu"
-                except Exception as e:
-                    print(f"⚠️  Could not determine GPU memory: {e}")
-                    print("⚠️  Attempting to use CUDA anyway...")
-                    return "cuda"  # Try CUDA anyway since it reported available
+                except:
+                    print("⚠️  Could not determine GPU memory, using CPU")
+                    return "cpu"
             else:
                 print("💻 No GPU detected, using CPU")
                 return "cpu"
         except ImportError:
             print("⚠️  PyTorch not available, using CPU")
+            return "cpu"
+        except Exception as e:
+            print(f"⚠️  Error in device detection: {e}")
+            print("🔧 Forcing to CPU due to detection issues")
             return "cpu"
     
     def _check_cuda(self) -> bool:
