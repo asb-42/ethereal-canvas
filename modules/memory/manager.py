@@ -19,7 +19,9 @@ except ImportError:
     TORCH_AVAILABLE = False
 
 try:
-    from diffusers import DiffusionPipeline, BitsAndBytesConfig, TorchAoConfig
+    from diffusers import DiffusionPipeline
+    from diffusers import BitsAndBytesConfig  # Correct import
+    from diffusers import TorchAoConfig  # Correct import
     from diffusers.utils import logging as diffusers_logging
     DIFFUSERS_AVAILABLE = True
 except ImportError:
@@ -159,9 +161,9 @@ class MemoryManager:
         # NF4 Quantized
         if DIFFUSERS_AVAILABLE and TRANSFORMERS_AVAILABLE and TORCH_AVAILABLE:
             try:
-                # Try to import DiffusersBitsAndBytesConfig
-                from diffusers import DiffusersBitsAndBytesConfig
-                nf4_config = DiffusersBitsAndBytesConfig(
+                # Try to import BitsAndBytesConfig (not DiffusersBitsAndBytesConfig)
+                from diffusers import BitsAndBytesConfig
+                nf4_config = BitsAndBytesConfig(
                     load_in_4bit=True,
                     bnb_4bit_quant_type="nf4",
                     bnb_4bit_compute_dtype=torch.bfloat16 if self.device == "cuda" else torch.float32,
@@ -176,7 +178,7 @@ class MemoryManager:
                     enable_xformers=False
                 )
             except ImportError as e:
-                print(f"Warning: DiffusersBitsAndBytesConfig not available: {e}")
+                print(f"Warning: BitsAndBytesConfig not available: {e}")
                 print("NF4 quantization strategy will not be available")
             except Exception as e:
                 print(f"Warning: Could not create NF4 quantization config: {e}")
