@@ -27,20 +27,17 @@ except ImportError:
     print("Warning: Pipeline monitoring not available for UI")
     MONITORING_AVAILABLE = False
 
+
 class EtherealCanvasUI:
     """Main UI class for Ethereal Canvas."""
     
-def __init__(self):
-        """Initialize the UI components."""
+    def __init__(self):
+        """Initialize UI components."""
         self.backend_adapter = None
         self.is_processing = False
         self.status_timer = None
         
-        # Initialize backend
-        self._initialize_backend()
-    
-    def _initialize_backend(self):
-        """Initialize the backend adapter."""
+        # Simple backend initialization
         try:
             import yaml
             with open("config/model_config.yaml") as f:
@@ -51,130 +48,7 @@ def __init__(self):
                 'edit_model': 'Qwen/Qwen-Image-Edit-2511'
             }
         
-        try:
-            self.backend_adapter = BackendAdapter(config)
-            self.backend_adapter.load()
-            return True, "Backend initialized successfully"
-        except Exception as e:
-            print(f"Backend initialization error: {e}")
-            # Continue with None backend - will work in stub mode
-            self.backend_adapter = None
-            return False, f"Failed to initialize backend: {str(e)}"
-    
-    def _log_message(self, message: str, status: str = "INFO"):
-        """Format log message with timestamp."""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        return f"[{timestamp}] {status}: {message}"
-    
-    def generate_t2i(self, prompt: str, seed: int | None = None):
-        """Generate image from text prompt."""
-        if self.is_processing:
-            return None, "⚠️ Another task is running. Please wait...", "error"
-        
-        self.is_processing = True
-        
-        try:
-            # Log start
-            log_msg = self._log_message(f"Starting T2I generation: {prompt[:50]}...", "INFO")
-            
-            # Execute generation using adapter if available, otherwise fallback
-            if self.backend_adapter:
-                result = self.backend_adapter.generate(prompt)
-            else:
-                # Fallback to simple task runner
-                if seed is not None and seed > 0:
-                    result = execute_task("generate", prompt, seed=seed)
-                else:
-                    result = execute_task("generate", prompt)
-            
-            # Get actual image path
-            if result and os.path.exists(result):
-                image_result = result
-                success_msg = self._log_message(f"T2I generation completed: {result}", "SUCCESS")
-            elif result and result.endswith('.png'):
-                # Check if result is a valid path even if file doesn't exist yet (stub mode)
-                image_result = result
-                success_msg = self._log_message(f"T2I generation completed: {result}", "SUCCESS")
-            else:
-                # No valid image path
-                image_result = None
-                success_msg = self._log_message(f"T2I generation failed: {result}", "ERROR")
-            
-            return image_result, success_msg, "success"
-            
-        except Exception as e:
-            error_msg = self._log_message(f"T2I generation failed: {str(e)}", "ERROR")
-            return None, error_msg, "error"
-            
-        finally:
-            self.is_processing = False
-    
-    def edit_i2i(self, image_file, prompt: str, seed: int | None = None):
-        """Edit image based on prompt."""
-        if self.is_processing:
-            return None, "⚠️ Another task is running. Please wait...", "error"
-        
-        if image_file is None:
-            return None, self._log_message("Please upload an image to edit", "ERROR"), "error"
-        
-        self.is_processing = True
-        
-        try:
-            # Get uploaded image path
-            image_path = image_file.name if hasattr(image_file, 'name') else str(image_file)
-            
-            # Log start
-            log_msg = self._log_message(f"Starting I2I edit: {prompt[:50]}...", "INFO")
-            
-            # Execute edit using adapter if available, otherwise fallback
-            if self.backend_adapter:
-                result = self.backend_adapter.edit(prompt, image_path)
-            else:
-                # Fallback to simple task runner
-                if seed is not None and seed > 0:
-                    result = execute_task("edit", prompt, input_path=image_path, seed=seed)
-                else:
-                    result = execute_task("edit", prompt, input_path=image_path)
-            
-            # Get actual image path
-            if os.path.exists(result):
-                image_result = result
-                success_msg = self._log_message(f"I2I edit completed: {result}", "SUCCESS")
-            else:
-                # Fallback for stub mode
-                image_result = None
-                success_msg = self._log_message(f"I2I edit completed (stub mode): {result}", "SUCCESS")
-            
-            return image_result, success_msg, "success"
-            
-        except Exception as e:
-            error_msg = self._log_message(f"I2I edit failed: {str(e)}", "ERROR")
-            return None, error_msg, "error"
-            
-        finally:
-            self.is_processing = False
-    
-    def get_system_info(self):
-        """Get system and backend information."""
-        try:
-            if self.backend_adapter:
-                model_info = self.backend_adapter.get_model_info()
-                backend_status = "✅ Ready"
-            else:
-                model_info = "Not loaded (using stub mode)"
-                backend_status = "⚠️ Stub Mode"
-            
-            return {
-                "Backend Status": backend_status,
-                "Models": str(model_info),
-                "Processing": "🔄 Busy" if self.is_processing else "✅ Idle"
-            }
-        except Exception as e:
-            return {
-                "Backend Status": f"❌ Error: {str(e)}",
-                "Models": "Unknown",
-                "Processing": "❓ Unknown"
-            }
+        self.backend_adapter = BackendAdapter(config)
     
     def get_status_updates(self):
         """Get recent status updates from pipeline monitor."""
@@ -207,73 +81,199 @@ def __init__(self):
             self.status_timer.cancel()
             self.status_timer = None
     
+    def _log_message(self, message: str, level: str = "INFO") -> str:
+        """Format log message with timestamp."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return f"[{timestamp}] {level}: {message}"
+    
+    def generate_t2i(self, prompt: str, seed: int | None = None):
+        """Generate image from text prompt."""
+        if self.is_processing:
+            return None, self._log_message("⚠️ Another task is running. Please wait...", "ERROR"), "error"
+        
+        if not prompt.strip():
+            return None, self._log_message("Please enter a prompt", "ERROR"), "error"
+        
+        self.is_processing = True
+        start_time = datetime.now()
+        
+        try:
+            self._log_message(f"🎨 Starting T2I generation: {prompt[:50]}...")
+            
+            # Execute T2I task using job runner
+            result = execute_task(
+                task_type="t2i",
+                prompt=prompt,
+                seed=seed,
+                backend_adapter=self.backend_adapter
+            )
+            
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            if result and result != "error":
+                success_msg = self._log_message(f"✅ T2I generation completed: {result}", "SUCCESS")
+                success_msg += f"\\n⏱️ Duration: {duration:.1f}s"
+                return result, success_msg, "success"
+            else:
+                error_msg = self._log_message(f"T2I generation failed: {result}", "ERROR")
+                return None, error_msg, "error"
+                
+        except Exception as e:
+            error_msg = self._log_message(f"T2I generation failed: {str(e)}", "ERROR")
+            return None, error_msg, "error"
+            
+        finally:
+            self.is_processing = False
+    
+    def edit_i2i(self, image_file, prompt: str, seed: int | None = None):
+        """Edit image based on prompt."""
+        if self.is_processing:
+            return None, self._log_message("⚠️ Another task is running. Please wait...", "ERROR"), "error"
+        
+        if image_file is None:
+            return None, self._log_message("Please upload an image to edit", "ERROR"), "error"
+        
+        if not prompt.strip():
+            return None, self._log_message("Please enter an edit prompt", "ERROR"), "error"
+        
+        self.is_processing = True
+        start_time = datetime.now()
+        
+        try:
+            self._log_message(f"🖼️ Starting I2I editing: {prompt[:50]}...")
+            
+            # Execute I2I task using job runner
+            result = execute_task(
+                task_type="i2i",
+                image_path=image_file,
+                prompt=prompt,
+                seed=seed,
+                backend_adapter=self.backend_adapter
+            )
+            
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            
+            if result and result != "error":
+                success_msg = self._log_message(f"✅ I2I editing completed: {result}", "SUCCESS")
+                success_msg += f"\\n⏱️ Duration: {duration:.1f}s"
+                return result, success_msg, "success"
+            else:
+                error_msg = self._log_message(f"I2I editing failed: {result}", "ERROR")
+                return None, error_msg, "error"
+                
+        except Exception as e:
+            error_msg = self._log_message(f"I2I editing failed: {str(e)}", "ERROR")
+            return None, error_msg, "error"
+            
+        finally:
+            self.is_processing = False
+    
+    def get_system_info(self):
+        """Get system and backend information."""
+        try:
+            if self.backend_adapter:
+                model_info = self.backend_adapter.get_model_info()
+                backend_status = "✅ Ready"
+            else:
+                model_info = "Not loaded (using stub mode)"
+                backend_status = "⚠️ Stub Mode"
+            
+            return {
+                "Backend Status": backend_status,
+                "Models": str(model_info),
+                "Processing": "🔄 Busy" if self.is_processing else "✅ Idle"
+            }
+        except Exception as e:
+            return {
+                "Backend Status": f"❌ Error: {str(e)}",
+                "Models": "Unknown",
+                "Processing": "❓ Unknown"
+            }
+    
     def create_ui(self):
         """Create the Gradio UI."""
         # Create demo without theme/css in constructor (move to launch for Gradio 6.0+)
         with gr.Blocks(
-            title="Ethereal Canvas - AI Image Generation & Editing"
+            title="Ethereal Canvas - AI Image Generation & Editing",
+            css="""
+            .log-box { font-family: monospace; font-size: 12px; }
+            .gradio-container { max-width: 1200px; }
+            """
         ) as demo:
-            
-            # Header
-            gr.Markdown("""
-            # 🎨 Ethereal Canvas
-            AI-powered image generation and editing using Qwen models
-            """)
-            
-            # System info
-            with gr.Accordion("System Status", open=False):
-                system_info = self.get_system_info()
-                gr.JSON(value=system_info, label="Backend Information")
-            
-            # Main tabs
-            with gr.Tabs():
-                
+            with gr.Tabs() as tabs:
                 # Tab 1: Generate (T2I)
-                with gr.TabItem("🖼️ Generate", id="generate"):
+                with gr.TabItem("🎨 Generate", id="t2i"):
                     gr.Markdown("### Text-to-Image Generation")
-                    gr.Markdown("Generate images from text descriptions using Qwen-Image-2512")
+                    gr.Markdown("Generate images from text using Qwen-Image-2512")
                     
                     with gr.Row():
-                        with gr.Column(scale=3):
-                            prompt_input = gr.Textbox(
-                                label="Prompt",
-                                placeholder="Enter your image description here...",
-                                lines=3,
-                                max_lines=5
+                        with gr.Column(scale=2):
+                            t2i_prompt = gr.Textbox(
+                                label="Generation Prompt",
+                                placeholder="Describe the image you want to generate...",
+                                lines=4,
+                                max_lines=8
                             )
                             
                             with gr.Row():
-                                seed_input = gr.Number(
+                                t2i_generate_btn = gr.Button("🚀 Generate", variant="primary", size="lg")
+                                t2i_clear_btn = gr.Button("🗑️ Clear", variant="secondary")
+                            
+                            with gr.Accordion("⚙️ Advanced Options", open=False):
+                                t2i_seed = gr.Number(
                                     label="Seed (optional)",
                                     value=None,
                                     precision=0,
-                                    info="Leave empty for random seed"
-                                )
-                                
-                                generate_btn = gr.Button(
-                                    "🎨 Generate Image",
-                                    variant="primary",
-                                    size="lg"
+                                    randomize=True
                                 )
                         
-                        with gr.Column(scale=2):
+                        with gr.Column(scale=1):
                             t2i_output = gr.Image(
                                 label="Generated Image",
                                 type="filepath",
-                                height=300
+                                height=400
                             )
+                            
+                            t2i_log = gr.Textbox(
+                                label="Status Log",
+                                lines=5,
+                                max_lines=10,
+                                interactive=False,
+                                elem_classes=["log-box"]
+                            )
+                            
+                            t2i_info = gr.JSON(label="System Info", visible=False)
                             
                             t2i_download = gr.File(
                                 label="Download Image",
                                 visible=False
                             )
                     
-                    t2i_log = gr.Textbox(
-                        label="Status Log",
-                        lines=5,
-                        max_lines=10,
-                        interactive=False,
-                        elem_classes=["log-box"]
+                    # T2I Tab event handlers
+                    t2i_generate_btn.click(
+                        fn=self.generate_t2i,
+                        inputs=[t2i_prompt, t2i_seed],
+                        outputs=[t2i_output, t2i_log, t2i_download, t2i_generate_btn]
+                    )
+                    
+                    t2i_clear_btn.click(
+                        fn=lambda: ("", None, None),
+                        outputs=[t2i_prompt, t2i_seed]
+                    )
+                    
+                    # Auto-update system info and status log
+                    demo.load(
+                        fn=self.get_system_info,
+                        outputs=[t2i_info],
+                        every=5  # Update every 5 seconds
+                    )
+                    
+                    demo.load(
+                        fn=self.get_status_updates,
+                        outputs=[t2i_log],
+                        every=2  # Update every 2 seconds
                     )
                 
                 # Tab 2: Edit (I2I)
@@ -282,7 +282,7 @@ def __init__(self):
                     gr.Markdown("Edit existing images using Qwen-Image-Edit-2511")
                     
                     with gr.Row():
-                        with gr.Column(scale=3):
+                        with gr.Column(scale=2):
                             input_image = gr.Image(
                                 label="Upload Image",
                                 type="filepath",
@@ -291,134 +291,75 @@ def __init__(self):
                             
                             edit_prompt = gr.Textbox(
                                 label="Edit Prompt",
-                                placeholder="Describe the changes you want to make...",
+                                placeholder="Describe changes you want to make...",
                                 lines=3,
                                 max_lines=5
                             )
                             
                             with gr.Row():
+                                edit_generate_btn = gr.Button("🖼️ Edit", variant="primary", size="lg")
+                                edit_clear_btn = gr.Button("🗑️ Clear", variant="secondary")
+                            
+                            with gr.Accordion("⚙️ Advanced Options", open=False):
                                 edit_seed = gr.Number(
                                     label="Seed (optional)",
                                     value=None,
                                     precision=0,
-                                    info="Leave empty for random seed"
-                                )
-                                
-                                edit_btn = gr.Button(
-                                    "✏️ Edit Image",
-                                    variant="primary",
-                                    size="lg"
+                                    randomize=True
                                 )
                         
-                        with gr.Column(scale=2):
+                        with gr.Column(scale=1):
                             edit_output = gr.Image(
                                 label="Edited Image",
                                 type="filepath",
-                                height=300
+                                height=400
                             )
+                            
+                            edit_log = gr.Textbox(
+                                label="Status Log",
+                                lines=5,
+                                max_lines=10,
+                                interactive=False,
+                                elem_classes=["log-box"]
+                            )
+                            
+                            edit_info = gr.JSON(label="System Info", visible=False)
                             
                             edit_download = gr.File(
                                 label="Download Image",
                                 visible=False
                             )
                     
-                    edit_log = gr.Textbox(
-                        label="Status Log",
-                        lines=5,
-                        max_lines=10,
-                        interactive=False,
-                        elem_classes=["log-box"]
+                    # I2I Tab event handlers
+                    edit_generate_btn.click(
+                        fn=self.edit_i2i,
+                        inputs=[input_image, edit_prompt, edit_seed],
+                        outputs=[edit_output, edit_log, edit_download, edit_generate_btn]
                     )
-            
-            # Footer
-            gr.Markdown("""
-            ---
-            **Models**: Qwen-Image-2512 (Generation) | Qwen-Image-Edit-2511 (Editing)
-            """)
-            
-            # Event handlers
-            def handle_generate(prompt, seed):
-                """Handle generate button click."""
-                image_path, log_msg, status = self.generate_t2i(prompt, seed)
-                
-                if status == "success" and image_path and os.path.exists(image_path):
-                    return (
-                        image_path,           # image
-                        log_msg,              # log
-                        gr.update(value=image_path, visible=True),  # download
-                        gr.update(interactive=False)  # disable button
+                    
+                    edit_clear_btn.click(
+                        fn=lambda: ("", None, None),
+                        outputs=[input_image, edit_prompt, edit_seed]
                     )
-                else:
-                    return (
-                        None,                 # image
-                        log_msg,              # log
-                        gr.update(visible=False),           # download
-                        gr.update(interactive=False)          # disable button
+                    
+                    # Auto-update system info and status log
+                    demo.load(
+                        fn=self.get_system_info,
+                        outputs=[edit_info],
+                        every=5  # Update every 5 seconds
                     )
-            
-            def handle_edit(image, prompt, seed):
-                """Handle edit button click."""
-                image_path, log_msg, status = self.edit_i2i(image, prompt, seed)
-                
-                if status == "success" and image_path and os.path.exists(image_path):
-                    return (
-                        image_path,           # image
-                        log_msg,              # log
-                        gr.update(value=image_path, visible=True),  # download
-                        gr.update(interactive=False)  # disable button
+                    
+                    demo.load(
+                        fn=self.get_status_updates,
+                        outputs=[edit_log],
+                        every=2  # Update every 2 seconds
                     )
-                else:
-                    return (
-                        None,                 # image
-                        log_msg,              # log
-                        gr.update(visible=False),           # download
-                        gr.update(interactive=False)          # disable button
-                    )
-            
-            def reset_buttons():
-                """Reset buttons to enabled state."""
-                return (
-                    gr.update(interactive=True),   # generate button
-                    gr.update(interactive=True)    # edit button
-                )
-            
-            # Wire up events
-            generate_btn.click(
-                fn=handle_generate,
-                inputs=[prompt_input, seed_input],
-                outputs=[t2i_output, t2i_log, t2i_download, generate_btn],
-                show_progress="minimal"
-            ).then(
-                fn=reset_buttons,
-                outputs=[generate_btn, edit_btn]
-            )
-            
-            edit_btn.click(
-                fn=handle_edit,
-                inputs=[input_image, edit_prompt, edit_seed],
-                outputs=[edit_output, edit_log, edit_download, edit_btn],
-                show_progress="minimal"
-            ).then(
-                fn=reset_buttons,
-                outputs=[generate_btn, edit_btn]
-            )
-            
-            # Initial system status update
-            # Note: demo.load() moved to .ready() in newer Gradio versions
-        try:
-            demo.load(
-                fn=self.get_system_info,
-                outputs=system_info
-            )
-        except AttributeError:
-            # Fallback for newer Gradio versions
-            pass
         
         return demo
 
-# Create and launch the UI
+
 def launch_ui(server_name="0.0.0.0", server_port=7860, share=False):
-    """Launch the Gradio UI."""
+    """Launch Gradio UI."""
     ui = EtherealCanvasUI()
     ui.start_status_updates()
     demo = ui.create_ui()
@@ -432,9 +373,5 @@ def launch_ui(server_name="0.0.0.0", server_port=7860, share=False):
         server_name=server_name,
         server_port=server_port,
         share=share,
-        show_error=True,
-        inbrowser=True
+        show_error=True
     )
-
-if __name__ == "__main__":
-    launch_ui()
