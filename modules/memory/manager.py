@@ -159,6 +159,8 @@ class MemoryManager:
         # NF4 Quantized
         if DIFFUSERS_AVAILABLE and TRANSFORMERS_AVAILABLE and TORCH_AVAILABLE:
             try:
+                # Try to import DiffusersBitsAndBytesConfig
+                from diffusers import DiffusersBitsAndBytesConfig
                 nf4_config = DiffusersBitsAndBytesConfig(
                     load_in_4bit=True,
                     bnb_4bit_quant_type="nf4",
@@ -173,8 +175,12 @@ class MemoryManager:
                     enable_attention_slicing=True,
                     enable_xformers=False
                 )
+            except ImportError as e:
+                print(f"Warning: DiffusersBitsAndBytesConfig not available: {e}")
+                print("NF4 quantization strategy will not be available")
             except Exception as e:
                 print(f"Warning: Could not create NF4 quantization config: {e}")
+                print("NF4 quantization strategy will not be available")
         
         # CPU Offload
         configs[LoadStrategy.CPU_OFFLOAD] = LoadingConfig(
@@ -197,6 +203,29 @@ class MemoryManager:
         )
         
         return configs
+    
+    def _get_available_strategies(self) -> List[LoadStrategy]:
+        """Get list of available strategies based on what was successfully configured."""
+        available = []
+        
+        if LoadStrategy.FP16_FULL in self.loading_configs:
+            available.append(LoadStrategy.FP16_FULL)
+        
+        if LoadStrategy.FP8_OPTIMIZED in self.loading_configs:
+            available.append(LoadStrategy.FP8_OPTIMIZED)
+        
+        # Only include NF4 if config was successfully created
+        if LoadStrategy.NF4_QUANTIZED in self.loading_configs:
+            if self.loading_configs[LoadStrategy.NF4_QUANTIZED].quantization_config is not None:
+                available.append(LoadStrategy.NF4_QUANTIZED)
+        
+        if LoadStrategy.CPU_OFFLOAD in self.loading_configs:
+            available.append(LoadStrategy.CPU_OFFLOAD)
+        
+        if LoadStrategy.SEQUENTIAL_OFFLOAD in self.loading_configs:
+            available.append(LoadStrategy.SEQUENTIAL_OFFLOAD)
+        
+        return available
     
     def get_available_memory_mb(self) -> float:
         """Get available GPU memory in MB."""
