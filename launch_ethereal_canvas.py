@@ -24,6 +24,11 @@ warnings.filterwarnings("ignore", message=".*zero_cond_t.*")
 warnings.filterwarnings("ignore", message=".*config.json.*")
 warnings.filterwarnings("ignore", message=".*Getötet.*")
 
+def log_message(message: str, level: str = "INFO"):
+    """Simple logging function."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {level}: {message}")
+
 def setup_sequential_downloads():
     """Set up environment for sequential downloads to prevent corruption."""
     import os
@@ -82,11 +87,7 @@ def launch_ui():
     """Launch Gradio UI with comprehensive error handling."""
     log_message("🚀 Starting Ethereal Canvas...")
     
-    # Apply CUDA fixes FIRST before any imports
-    try:
-        setup_cuda_environment()
-    except Exception as e:
-        log_message(f"⚠️ CUDA setup failed, continuing anyway: {e}")
+    # CUDA environment variables already set up at the top of the script
     
     # Set up sequential downloads
     setup_sequential_downloads()
