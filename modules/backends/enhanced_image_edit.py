@@ -197,7 +197,9 @@ class EnhancedImageEditBackend:
                 "image": input_image,
                 "prompt": prompt,
                 "num_inference_steps": kwargs.get("num_inference_steps", 20),
-                "guidance_scale": kwargs.get("guidance_scale", 7.5),
+                "true_cfg_scale": kwargs.get("true_cfg_scale", 4.0),  # Qwen-Edit specific
+                "negative_prompt": kwargs.get("negative_prompt", ""),  # Required
+                "guidance_scale": kwargs.get("guidance_scale", 1.0),  # Qwen-Edit specific
                 "num_images_per_prompt": 1,
             }
             

@@ -255,13 +255,17 @@ class ImageEditBackend:
                 context_manager = nullcontext()
             
             with context_manager:
-                result = self.pipeline(
-                    image=input_image,
-                    prompt=prompt,
-                    num_inference_steps=20,
-                    guidance_scale=7.5,
-                    num_images_per_prompt=1
-                )
+                # Qwen-Edit Pipeline expects specific parameters
+                inputs = {
+                    "image": input_image,
+                    "prompt": prompt,
+                    "num_inference_steps": 20,
+                    "true_cfg_scale": 4.0,  # Qwen-Edit specific parameter
+                    "negative_prompt": "",  # Required to avoid warning
+                    "guidance_scale": 1.0,  # Qwen-Edit specific parameter  
+                    "num_images_per_prompt": 1
+                }
+                result = self.pipeline(**inputs)
             
             edited_image = result.images[0]
             
