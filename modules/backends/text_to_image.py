@@ -290,6 +290,7 @@ class TextToImageBackend(GenerationBackend):
         except Exception as e:
             self.logger.error(f"All loading strategies failed: {e}")
             self.loaded = True  # Prevent repeated attempts
+            self.pipeline = None  # Explicitly set pipeline to None when loading fails
     
     def _load_standard(self) -> None:
         """Standard loading without memory management (fallback)."""
@@ -357,8 +358,8 @@ class TextToImageBackend(GenerationBackend):
     
     def generate(self, prompt: str) -> str:
         """Generate image from text prompt."""
-        if not self.loaded:
-            self.logger.warning("Model not loaded, using stub implementation")
+        if not self.loaded or self.pipeline is None:
+            self.logger.warning("Model not loaded or pipeline not available, using stub implementation")
             return self._generate_stub(prompt)
         
         start_time = time.time()

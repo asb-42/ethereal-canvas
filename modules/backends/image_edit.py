@@ -186,6 +186,7 @@ class ImageEditBackend:
             print(f"Failed to load edit model: {e}")
             print("Falling back to stub implementation...")
             self.loaded = True  # Still mark as loaded to avoid repeated attempts
+            self.pipeline = None  # Explicitly set pipeline to None when loading fails
     
     def edit(self, prompt, input_path):
         """Edit image based on prompt."""
