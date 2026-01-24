@@ -6,6 +6,11 @@ import os
 from pathlib import Path
 from datetime import datetime
 
+try:
+    import torch
+except ImportError:
+    torch = None
+
 # Import memory management
 try:
     from modules.memory import memory_manager, LoadStrategy
@@ -240,7 +245,14 @@ class ImageEditBackend:
             input_image = read_image(input_path)
             
             # Generate edited image
-            with torch.autocast(self.device):
+            if torch and hasattr(torch, 'autocast'):
+                context_manager = torch.autocast(self.device)
+            else:
+                # Fallback if torch.autocast not available
+                from contextlib import nullcontext
+                context_manager = nullcontext()
+            
+            with context_manager:
                 result = self.pipeline(
                     image=input_image,
                     prompt=prompt,
