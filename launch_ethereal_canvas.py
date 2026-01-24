@@ -87,11 +87,14 @@ def check_port_available(port: int) -> bool:
             return False
 
 def launch_ui():
-    """Launch the Gradio UI with comprehensive error handling."""
+    """Launch Gradio UI with comprehensive error handling."""
     log_message("🚀 Starting Ethereal Canvas...")
     
     # Apply CUDA fixes FIRST before any imports
-    setup_cuda_environment()
+    try:
+        setup_cuda_environment()
+    except Exception as e:
+        log_message(f"⚠️ CUDA setup failed, continuing anyway: {e}")
     
     # Set up sequential downloads
     setup_sequential_downloads()
