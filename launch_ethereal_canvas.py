@@ -23,8 +23,6 @@ warnings.filterwarnings("ignore", message=".*torch_dtype.*is deprecated.*")
 warnings.filterwarnings("ignore", message=".*zero_cond_t.*")
 warnings.filterwarnings("ignore", message=".*config.json.*")
 warnings.filterwarnings("ignore", message=".*Getötet.*")
-    
-    print("🔧 Applied CUDA environment fixes")
 
 def setup_sequential_downloads():
     """Set up environment for sequential downloads to prevent corruption."""
