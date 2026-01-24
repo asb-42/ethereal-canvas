@@ -18,18 +18,12 @@ def log_message(message: str, level: str = "INFO"):
 def setup_cuda_environment():
     """Set up CUDA environment to prevent initialization errors."""
     import os
-    import warnings
-    
-    # Set environment variables BEFORE any torch imports
-    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-    os.environ["CUDA_MODULE_LOADING"] = "LAZY"
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,expandable_segments:True"
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    
-    # Filter warnings
-    warnings.filterwarnings("ignore", message=".*CUDA initialization.*forward compatibility.*")
-    warnings.filterwarnings("ignore", message=".*UserWarning: CUDA is not available.*")
-    warnings.filterwarnings("ignore", message=".*torch_dtype.*is deprecated.*")
+        import warnings
+        warnings.filterwarnings("ignore", message=".*UserWarning: CUDA is not available.*") 
+        warnings.filterwarnings("ignore", message=".*torch_dtype.*is deprecated.*")
+        warnings.filterwarnings("ignore", message=".*zero_cond_t.*")
+        warnings.filterwarnings("ignore", message=".*config.json.*")
+        warnings.filterwarnings("ignore", message=".*Getötet.*")
     
     print("🔧 Applied CUDA environment fixes")
 
@@ -40,6 +34,7 @@ def setup_sequential_downloads():
     os.environ["HF_HUB_DOWNLOAD_RETRY"] = "3"  # Retry downloads
     os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"  # Disable telemetry
     os.environ["HUGGINGFACE_HUB_DISABLE_PROGRESS_BARS"] = "1"  # Disable conflicting progress bars
+    os.environ["HF_HUB_HUB_DISABLE_PROGRESS_BARS"] = "1"  # Disable progress bars completely
     log_message("✅ Configured sequential downloads")
 
 def check_dependencies():
