@@ -5,6 +5,7 @@ Provides simple routing between different model types.
 
 from .text_to_image import TextToImageBackend
 from .image_edit import ImageEditBackend
+from typing import Optional, Dict, Any
 # from .image_inpaint import ImageInpaintBackend  # Temporarily disabled
 
 
@@ -22,7 +23,7 @@ class BackendAdapter:
         # self.inpaint_model = config.get('edit_model', 'Qwen/Qwen-Image-Edit-2511')  # Temporarily disabled
         
         # Lazy loading backends - only create when needed
-        self.backends = {
+        self.backends: Dict[str, Any] = {
             't2i': None,
             'edit': None,
             # 'inpaint': None,  # Temporarily disabled - same as edit
@@ -31,10 +32,14 @@ class BackendAdapter:
     def _get_t2i_backend(self):
         """Lazy load T2I backend."""
         if self.backends['t2i'] is None:
-            print("🔧 Loading T2I backend on demand...")
-            self.backends['t2i'] = TextToImageBackend(self.t2i_model)
-            self.backends['t2i'].load()
-            print("✅ T2I backend loaded successfully")
+            try:
+                print("🔧 Loading T2I backend on demand...")
+                self.backends['t2i'] = TextToImageBackend(self.t2i_model)
+                self.backends['t2i'].load()
+                print("✅ T2I backend loaded successfully")
+            except Exception as e:
+                print(f"❌ Failed to load T2I backend: {e}")
+                raise
         return self.backends['t2i']
     
     def generate(self, prompt):
@@ -44,10 +49,14 @@ class BackendAdapter:
     def _get_edit_backend(self):
         """Lazy load edit backend."""
         if self.backends['edit'] is None:
-            print("🔧 Loading Edit backend on demand...")
-            self.backends['edit'] = ImageEditBackend(self.edit_model)
-            self.backends['edit'].load()
-            print("✅ Edit backend loaded successfully")
+            try:
+                print("🔧 Loading Edit backend on demand...")
+                self.backends['edit'] = ImageEditBackend(self.edit_model)
+                self.backends['edit'].load()
+                print("✅ Edit backend loaded successfully")
+            except Exception as e:
+                print(f"❌ Failed to load Edit backend: {e}")
+                raise
         return self.backends['edit']
     
     def edit(self, prompt, input_path):
