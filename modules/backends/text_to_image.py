@@ -366,6 +366,9 @@ class TextToImageBackend(GenerationBackend):
         try:
             self.logger.info(f"Generating image for prompt: {prompt[:50]}...")
             
+            # Import torch for this method
+            import torch
+            
             # Generate image with proper autocast (CPU compatibility)
             if self.device == "cuda":
                 with torch.autocast("cuda"):
@@ -389,6 +392,10 @@ class TextToImageBackend(GenerationBackend):
             # Save image to runtime/outputs/
             from datetime import datetime
             timestamp_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            
+            # Ensure output directory exists
+            OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+            
             output_path = OUTPUTS_DIR / f"t2i_{timestamp_str}.png"
             image.save(output_path)
             
@@ -414,6 +421,9 @@ class TextToImageBackend(GenerationBackend):
     def _generate_stub(self, prompt: str) -> str:
         """Fallback stub implementation when models are not available."""
         try:
+            # Ensure output directory exists
+            OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+            
             # Simple deterministic stub
             import hashlib
             hash_input = (prompt + str(time.time())).encode('utf-8')
