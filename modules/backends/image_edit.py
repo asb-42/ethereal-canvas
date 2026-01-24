@@ -242,7 +242,8 @@ class ImageEditBackend:
             print(f"Edit prompt: {prompt[:50]}...")
             
             # Load input image
-            input_image = read_image(input_path)
+            image_data = read_image(input_path)
+            input_image = image_data.pixels  # Extract PIL Image from ImageData
             
             # Generate edited image
             if torch and hasattr(torch, 'autocast'):
