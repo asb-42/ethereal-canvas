@@ -276,9 +276,14 @@ class TextToImageBackend(GenerationBackend):
                     low_cpu_mem_usage=True
                 )
                 
-                # Enable all memory optimizations
-                self.pipeline.enable_sequential_cpu_offload()
-                self.pipeline.enable_attention_slicing()
+                # Enable memory optimizations for GPU
+                if self.device == "cuda":
+                    self.pipeline.enable_attention_slicing()
+                    # Only enable CPU offload if we have memory issues
+                    # self.pipeline.enable_sequential_cpu_offload()  # DISABLED - causes CPU/CUDA mismatch
+                else:
+                    self.pipeline.enable_attention_slicing()
+                    self.pipeline.enable_sequential_cpu_offload()
                 
                 self.loaded = True
                 self.logger.info("✅ Loaded with aggressive memory optimizations")

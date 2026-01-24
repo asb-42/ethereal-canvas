@@ -189,7 +189,7 @@ class MemoryManager:
             low_cpu_mem_usage=True,
             enable_model_cpu_offload=True,
             enable_attention_slicing=True,
-            enable_xformers=False
+            enable_xformers=True if self.device == "cuda" else False  # Only enable xFormers on CUDA
         )
         
         # Sequential CPU Offload
