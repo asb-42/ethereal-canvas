@@ -103,8 +103,8 @@ class EtherealCanvasUI:
             
             # Execute T2I task using job runner
             result = execute_task(
-                task_type="t2i",
-                prompt=prompt,
+                task_type="generate",
+                prompt_text=prompt,
                 seed=seed,
                 backend_adapter=self.backend_adapter
             )
@@ -146,9 +146,9 @@ class EtherealCanvasUI:
             
             # Execute I2I task using job runner
             result = execute_task(
-                task_type="i2i",
-                image_path=image_file,
-                prompt=prompt,
+                task_type="edit",
+                prompt_text=prompt,
+                input_path=image_file,
                 seed=seed,
                 backend_adapter=self.backend_adapter
             )
@@ -257,8 +257,76 @@ class EtherealCanvasUI:
                     t2i_clear_btn.click(
                         fn=lambda: ("", None, None),
                         outputs=[t2i_prompt, t2i_seed]
+)
+                
+                # Tab 2: Edit (I2I)
+                with gr.TabItem("✏️ Edit", id="edit"):
+                    gr.Markdown("### Image-to-Image Editing")
+                    gr.Markdown("Edit existing images using Qwen-Image-Edit-2511")
+                    
+                    with gr.Row():
+                        with gr.Column(scale=3):
+                            input_image = gr.Image(
+                                label="Upload Image",
+                                type="filepath",
+                                height=200
+                            )
+                            
+                            edit_prompt = gr.Textbox(
+                                label="Edit Prompt",
+                                placeholder="Describe changes you want to make...",
+                                lines=3,
+                                max_lines=5
+                            )
+                            
+                            with gr.Row():
+                                edit_generate_btn = gr.Button("✏️ Edit Image", variant="primary", size="lg")
+                                edit_clear_btn = gr.Button("🗑️ Clear", variant="secondary")
+                            
+                            with gr.Accordion("⚙️ Advanced Options", open=False):
+                                edit_seed = gr.Number(
+                                    label="Seed (optional)",
+                                    value=None,
+                                    precision=0,
+                                    info="Leave empty for random seed"
+                                )
+                        
+                        with gr.Column(scale=2):
+                            edit_output = gr.Image(
+                                label="Edited Image",
+                                type="filepath",
+                                height=300
+                            )
+                            
+                            edit_log = gr.Textbox(
+                                label="Status Log",
+                                lines=5,
+                                max_lines=10,
+                                interactive=False,
+                                elem_classes=["log-box"]
+                            )
+                            
+                            edit_info = gr.JSON(label="System Info", visible=False)
+                            
+                            edit_download = gr.File(
+                                label="Download Image",
+                                visible=False
+                            )
+                    
+                    # Note: Real-time status updates handled by background threading
+                    
+                    # I2I Tab event handlers
+                    edit_generate_btn.click(
+                        fn=self.edit_i2i,
+                        inputs=[input_image, edit_prompt, edit_seed],
+                        outputs=[edit_output, edit_log, edit_download, edit_generate_btn]
                     )
                     
+                    edit_clear_btn.click(
+                        fn=lambda: ("", None, None),
+                        outputs=[input_image, edit_prompt, edit_seed]
+                    )
+                
         return demo
 
 
