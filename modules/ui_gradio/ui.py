@@ -30,7 +30,7 @@ except ImportError:
 class EtherealCanvasUI:
     """Main UI class for Ethereal Canvas."""
     
-def __init__(self):
+    def __init__(self):
         """Initialize the UI components."""
         self.backend_adapter = None
         self.is_processing = False
@@ -47,25 +47,13 @@ def __init__(self):
                 'edit_model': 'Qwen/Qwen-Image-Edit-2511'
             }
 
-        self.backend_adapter = BackendAdapter(config)
-        
-        # Initialize backend
-        self._initialize_backend()
-    
-            config = {
-                'generate_model': 'Qwen/Qwen-Image-2512',
-                'edit_model': 'Qwen/Qwen-Image-Edit-2511'
-            }
-        
         try:
             self.backend_adapter = BackendAdapter(config)
             self.backend_adapter.load()
-            return True, "Backend initialized successfully"
         except Exception as e:
             print(f"Backend initialization error: {e}")
             # Continue with None backend - will work in stub mode
             self.backend_adapter = None
-            return False, f"Failed to initialize backend: {str(e)}"
     
     def _log_message(self, message: str, status: str = "INFO"):
         """Format log message with timestamp."""
