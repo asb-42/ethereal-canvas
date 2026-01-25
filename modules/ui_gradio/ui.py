@@ -54,6 +54,9 @@ class EtherealCanvasUI:
             print(f"Backend initialization error: {e}")
             # Continue with None backend - will work in stub mode
             self.backend_adapter = None
+        
+        # Start status updates after UI is created
+        self.start_status_updates()
     
     def _log_message(self, message: str, status: str = "INFO"):
         """Format log message with timestamp."""
@@ -70,6 +73,13 @@ class EtherealCanvasUI:
         try:
             # Log start
             log_msg = self._log_message(f"Starting T2I generation: {prompt[:50]}...", "INFO")
+            
+            # Create a callback to capture backend messages for UI
+            status_messages = []
+            def backend_status_callback(message):
+                status_messages.append(message)
+                # Update UI with latest messages
+                return "\n".join(status_messages[-20:])  # Keep last 20 messages
             
             # Execute generation using adapter if available, otherwise fallback
             if self.backend_adapter:
@@ -184,9 +194,13 @@ class EtherealCanvasUI:
         
         def update_status():
             try:
-                if hasattr(self, 't2i_log_component') and MONITORING_AVAILABLE:
+                if MONITORING_AVAILABLE:
                     status_text = self.get_status_updates()
-                    self.t2i_log_component.value = status_text
+                    # Update both log components if they exist
+                    if hasattr(self, 't2i_log_component'):
+                        self.t2i_log_component.value = status_text
+                    if hasattr(self, 'edit_log_component'):
+                        self.edit_log_component.value = status_text
             except Exception as e:
                 print(f"Status update error: {e}")
         
@@ -282,6 +296,9 @@ class EtherealCanvasUI:
                         interactive=False,
                         elem_classes=["log-box"]
                     )
+                    
+                    # Store reference for status updates
+                    self.t2i_log_component = t2i_log
                 
                 # Tab 2: Edit (I2I)
                 with gr.TabItem("✏️ Edit", id="edit"):
@@ -336,6 +353,9 @@ class EtherealCanvasUI:
                         interactive=False,
                         elem_classes=["log-box"]
                     )
+                    
+                    # Store reference for status updates
+                    self.edit_log_component = edit_log
             
             # Footer
             gr.Markdown("""

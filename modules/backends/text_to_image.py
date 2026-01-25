@@ -402,7 +402,6 @@ class TextToImageBackend(GenerationBackend):
                 result = self.pipeline(
                     prompt,
                     num_inference_steps=20,
-                    guidance_scale=7.5,
                     num_images_per_prompt=1
                 )
             
