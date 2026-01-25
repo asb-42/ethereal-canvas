@@ -81,7 +81,8 @@ class ImageEditBackend:
         try:
             # Define loading function for memory manager
             def load_edit_model(**kwargs):
-                return DiffusionPipeline.from_pretrained(
+                from diffusers import QwenImageEditPipeline
+                return QwenImageEditPipeline.from_pretrained(
                     self.model_name,
                     cache_dir=str(self.cache_dir),
                     **kwargs
@@ -130,13 +131,13 @@ class ImageEditBackend:
             print("Attempting aggressive memory-saving strategies...")
             
             import torch
-            from diffusers import DiffusionPipeline
+            from diffusers import QwenImageEditPipeline
             
             # Try sequential offload first
             try:
                 import os
                 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-                self.pipeline = DiffusionPipeline.from_pretrained(
+                self.pipeline = QwenImageEditPipeline.from_pretrained(
                     self.model_name,
                     cache_dir=str(self.cache_dir),
                     torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
@@ -163,8 +164,7 @@ class ImageEditBackend:
         """Standard loading without memory management (fallback)."""
         try:
             import torch
-            from diffusers import DiffusionPipeline
-            # QwenImageEditPlusPipeline doesn't exist, use standard pipeline
+            from diffusers import QwenImageEditPipeline
         except ImportError as e:
             print(f"Failed to import required dependencies: {e}")
             print("Using stub implementation...")
@@ -176,8 +176,8 @@ class ImageEditBackend:
         print(f"Cache directory: {self.cache_dir}")
         
         try:
-            # Load the image editing pipeline using standard DiffusionPipeline
-            self.pipeline = DiffusionPipeline.from_pretrained(
+            # Load the image editing pipeline using QwenImageEditPipeline
+            self.pipeline = QwenImageEditPipeline.from_pretrained(
                 self.model_name,
                 cache_dir=str(self.cache_dir),
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
