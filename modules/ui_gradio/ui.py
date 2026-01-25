@@ -31,10 +31,11 @@ class EtherealCanvasUI:
     """Main UI class for Ethereal Canvas."""
     
     def __init__(self):
-        """Initialize the UI components."""
+        """Initialize UI components."""
         self.backend_adapter = None
         self.is_processing = False
         self.status_timer = None
+        self.abort_requested = False
 
         # Simple backend initialization
         try:
@@ -69,27 +70,25 @@ class EtherealCanvasUI:
             return None, "⚠️ Another task is running. Please wait...", "error"
         
         self.is_processing = True
+        self.abort_requested = False
         
         try:
             # Log start
-            log_msg = self._log_message(f"Starting T2I generation: {prompt[:50]}...", "INFO")
-            
-            # Create a callback to capture backend messages for UI
-            status_messages = []
-            def backend_status_callback(message):
-                status_messages.append(message)
-                # Update UI with latest messages
-                return "\n".join(status_messages[-20:])  # Keep last 20 messages
+            initial_msg = f"[{datetime.now().strftime('%H:%M:%S')}] INFO: Starting T2I generation: {prompt[:50]}..."
             
             # Execute generation using adapter if available, otherwise fallback
             if self.backend_adapter:
+                print("🔍 Testing backend adapter...")
                 result = self.backend_adapter.generate(prompt)
+                print(f"🔍 Backend result: {result}")
             else:
+                print("🔍 Using task runner fallback...")
                 # Fallback to simple task runner
                 if seed is not None and seed > 0:
                     result = execute_task("generate", prompt, seed=seed)
                 else:
                     result = execute_task("generate", prompt)
+                print(f"🔍 Task runner result: {result}")
             
             # Get actual image path
             if result and os.path.exists(result):
@@ -113,6 +112,19 @@ class EtherealCanvasUI:
         finally:
             self.is_processing = False
     
+    def abort_generation(self):
+        """Abort current generation process."""
+        self.abort_requested = True
+        self.is_processing = False
+        print("🛑 Generation/Editing aborted by user")
+        abort_msg = self._log_message("Generation/Editing aborted by user", "INFO")
+        # Return outputs for both generate and edit abort buttons
+        return (
+            abort_msg,           # log message
+            gr.update(interactive=True),  # enable generate/edit button
+            gr.update(interactive=False)  # disable abort button
+        )
+    
     def edit_i2i(self, image_file, prompt: str, seed: int | None = None):
         """Edit image based on prompt."""
         if self.is_processing:
@@ -122,6 +134,7 @@ class EtherealCanvasUI:
             return None, self._log_message("Please upload an image to edit", "ERROR"), "error"
         
         self.is_processing = True
+        self.abort_requested = False
         
         try:
             # Get uploaded image path
@@ -196,13 +209,15 @@ class EtherealCanvasUI:
             try:
                 if MONITORING_AVAILABLE:
                     status_text = self.get_status_updates()
-                    # Update both log components if they exist
+                    # Update both log components if they exist using gr.update()
                     if hasattr(self, 't2i_log_component'):
-                        self.t2i_log_component.value = status_text
+                        return gr.update(value=status_text)
                     if hasattr(self, 'edit_log_component'):
-                        self.edit_log_component.value = status_text
+                        return gr.update(value=status_text)
+                return gr.update()  # No change
             except Exception as e:
                 print(f"Status update error: {e}")
+                return gr.update()
         
         # Start timer for updates every 2 seconds
         self.status_timer = threading.Timer(2.0, update_status)
@@ -271,11 +286,17 @@ class EtherealCanvasUI:
                                     info="Leave empty for random seed"
                                 )
                                 
-                                generate_btn = gr.Button(
-                                    "🎨 Generate Image",
-                                    variant="primary",
-                                    size="lg"
-                                )
+                                with gr.Row():
+                                    generate_btn = gr.Button(
+                                        "🎨 Generate Image",
+                                        variant="primary",
+                                        size="lg"
+                                    )
+                                    abort_generate_btn = gr.Button(
+                                        "⏹️ Abort",
+                                        variant="stop",
+                                        size="lg"
+                                    )
                         
                         with gr.Column(scale=2):
                             t2i_output = gr.Image(
@@ -328,11 +349,17 @@ class EtherealCanvasUI:
                                     info="Leave empty for random seed"
                                 )
                                 
-                                edit_btn = gr.Button(
-                                    "✏️ Edit Image",
-                                    variant="primary",
-                                    size="lg"
-                                )
+                                with gr.Row():
+                                    edit_btn = gr.Button(
+                                        "✏️ Edit Image",
+                                        variant="primary",
+                                        size="lg"
+                                    )
+                                    abort_edit_btn = gr.Button(
+                                        "⏹️ Abort",
+                                        variant="stop",
+                                        size="lg"
+                                    )
                         
                         with gr.Column(scale=2):
                             edit_output = gr.Image(
@@ -428,6 +455,17 @@ class EtherealCanvasUI:
             ).then(
                 fn=reset_buttons,
                 outputs=[generate_btn, edit_btn]
+            )
+            
+            # Abort button events
+            abort_generate_btn.click(
+                fn=self.abort_generation,
+                outputs=[t2i_log, generate_btn, abort_generate_btn]
+            )
+            
+            abort_edit_btn.click(
+                fn=self.abort_generation,
+                outputs=[edit_log, edit_btn, abort_edit_btn]
             )
             
             # Initial system status update
