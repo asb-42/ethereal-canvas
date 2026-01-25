@@ -269,21 +269,17 @@ class ImageEditBackend:
             if monitor:
                 monitor.update_step("Setting up autocast context")
             
-            # Generate edited image
-            if torch and hasattr(torch, 'autocast'):
-                if self.device == "cuda":
-                    context_manager = torch.autocast("cuda")
-                else:
-                    context_manager = torch.autocast("cpu")
-            else:
-                # Fallback if torch.autocast not available
-                from contextlib import nullcontext
-                context_manager = nullcontext()
-            
             if monitor:
                 monitor.update_step("Running Qwen-Edit pipeline inference")
             
-            with context_manager:
+            # Use torch.inference_mode() for better performance and memory usage
+            if torch and hasattr(torch, 'inference_mode'):
+                inference_context = torch.inference_mode()
+            else:
+                from contextlib import nullcontext
+                inference_context = nullcontext()
+            
+            with inference_context:
                 # Qwen-Edit Pipeline expects specific parameters
                 inputs = {
                     "image": input_image,
