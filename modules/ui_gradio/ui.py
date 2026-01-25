@@ -75,6 +75,14 @@ class EtherealCanvasUI:
         try:
             # Log start
             initial_msg = f"[{datetime.now().strftime('%H:%M:%S')}] INFO: Starting T2I generation: {prompt[:50]}..."
+            print(f"🔍 DEBUG: Initial message: {initial_msg}")
+            
+            # Directly update T2I log if component exists
+            if hasattr(self, 't2i_log_component'):
+                current_logs = self.t2i_log_component.value or ""
+                updated_logs = current_logs + "\n" + initial_msg if current_logs else initial_msg
+                self.t2i_log_component.value = updated_logs
+                print("🔍 DEBUG: Updated T2I log with initial message")
             
             # Execute generation using adapter if available, otherwise fallback
             if self.backend_adapter:
@@ -114,10 +122,24 @@ class EtherealCanvasUI:
     
     def abort_generation(self):
         """Abort current generation process."""
+        print("🔍 DEBUG: abort_generation method called!")
         self.abort_requested = True
         self.is_processing = False
+        
+        # Create abort flag file for backend to detect
+        import os
+        from pathlib import Path
+        runtime_dir = Path("runtime")
+        runtime_dir.mkdir(exist_ok=True)
+        abort_file = runtime_dir / ".abort_generation"
+        abort_file.touch()
+        
+        print(f"🔍 DEBUG: Abort file created at: {abort_file}")
+        print(f"🔍 DEBUG: Abort file exists: {abort_file.exists()}")
+        
         print("🛑 Generation/Editing aborted by user")
         abort_msg = self._log_message("Generation/Editing aborted by user", "INFO")
+        print(f"🔍 DEBUG: Abort message: {abort_msg}")
         # Return outputs for both generate and edit abort buttons
         return (
             abort_msg,           # log message
@@ -141,7 +163,15 @@ class EtherealCanvasUI:
             image_path = image_file.name if hasattr(image_file, 'name') else str(image_file)
             
             # Log start
-            log_msg = self._log_message(f"Starting I2I edit: {prompt[:50]}...", "INFO")
+            initial_msg = f"[{datetime.now().strftime('%H:%M:%S')}] INFO: Starting I2I edit: {prompt[:50]}..."
+            print(f"🔍 DEBUG: I2I initial message: {initial_msg}")
+            
+            # Directly update Edit log if component exists
+            if hasattr(self, 'edit_log_component'):
+                current_logs = self.edit_log_component.value or ""
+                updated_logs = current_logs + "\n" + initial_msg if current_logs else initial_msg
+                self.edit_log_component.value = updated_logs
+                print("🔍 DEBUG: Updated Edit log with initial message")
             
             # Execute edit using adapter if available, otherwise fallback
             if self.backend_adapter:
@@ -209,15 +239,22 @@ class EtherealCanvasUI:
             try:
                 if MONITORING_AVAILABLE:
                     status_text = self.get_status_updates()
-                    # Update both log components if they exist using gr.update()
+                    print(f"🔍 DEBUG: Status update called with: {status_text[:100]}...")
+                    
+                    # Update both log components if they exist
                     if hasattr(self, 't2i_log_component'):
-                        return gr.update(value=status_text)
+                        self.t2i_log_component.value = status_text
+                        print("🔍 DEBUG: Updated T2I log component")
                     if hasattr(self, 'edit_log_component'):
-                        return gr.update(value=status_text)
-                return gr.update()  # No change
+                        self.edit_log_component.value = status_text
+                        print("🔍 DEBUG: Updated Edit log component")
+                else:
+                    print("🔍 DEBUG: MONITORING_AVAILABLE is False")
+                return
             except Exception as e:
-                print(f"Status update error: {e}")
-                return gr.update()
+                print(f"🔍 DEBUG: Status update error: {e}")
+                import traceback
+                traceback.print_exc()
         
         # Start timer for updates every 2 seconds
         self.status_timer = threading.Timer(2.0, update_status)
