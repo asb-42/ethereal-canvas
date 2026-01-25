@@ -104,10 +104,11 @@ class ImageEditBackend:
                 self.pipeline.enable_attention_slicing()
                 print("✓ Enabled attention slicing")
             
+            # Disable xFormers to prevent CPU/CUDA tensor mismatches
             if hasattr(config, 'enable_xformers') and config.enable_xformers:
                 try:
-                    self.pipeline.enable_xformers_memory_efficient_attention()
-                    print("✓ Enabled xFormers optimization")
+                    # self.pipeline.enable_xformers_memory_efficient_attention()
+                    print("⚠️ xFormers optimization disabled due to tensor placement issues")
                 except Exception as e:
                     print(f"xFormers not available: {e}")
             
@@ -145,9 +146,13 @@ class ImageEditBackend:
                     low_cpu_mem_usage=True
                 )
                 
-                # Enable all memory optimizations
-                self.pipeline.enable_sequential_cpu_offload()
-                self.pipeline.enable_attention_slicing()
+                # Enable memory optimizations - keep on CUDA to prevent tensor mismatches
+                if self.device == "cuda":
+                    self.pipeline.enable_attention_slicing()
+                    # Keep pipeline on CUDA, no CPU offloading for xFormers compatibility
+                else:
+                    self.pipeline.enable_sequential_cpu_offload()
+                    self.pipeline.enable_attention_slicing()
                 
                 self.loaded = True
                 print("✓ Loaded with aggressive memory optimizations")
