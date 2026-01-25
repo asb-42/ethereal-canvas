@@ -271,7 +271,10 @@ class ImageEditBackend:
             
             # Generate edited image
             if torch and hasattr(torch, 'autocast'):
-                context_manager = torch.autocast(self.device)
+                if self.device == "cuda":
+                    context_manager = torch.autocast("cuda")
+                else:
+                    context_manager = torch.autocast("cpu")
             else:
                 # Fallback if torch.autocast not available
                 from contextlib import nullcontext
