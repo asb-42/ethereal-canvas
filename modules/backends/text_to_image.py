@@ -234,10 +234,11 @@ class TextToImageBackend(GenerationBackend):
                     self.pipeline.enable_attention_slicing()
                     self.logger.info("✅ Enabled attention slicing")
                 
+                # Disable xFormers for now due to CPU/CUDA tensor mismatches
                 if hasattr(config, 'enable_xformers') and config.enable_xformers:
                     try:
-                        self.pipeline.enable_xformers_memory_efficient_attention()
-                        self.logger.info("✅ Enabled xFormers optimization")
+                        # self.pipeline.enable_xformers_memory_efficient_attention()
+                        self.logger.info("⚠️ xFormers optimization disabled due to tensor placement issues")
                     except Exception as e:
                         self.logger.info(f"xFormers not available: {e}")
                 
@@ -284,11 +285,10 @@ class TextToImageBackend(GenerationBackend):
                     low_cpu_mem_usage=True
                 )
                 
-                # Enable memory optimizations for GPU
+                # Enable memory optimizations - keep everything on CUDA to avoid tensor mismatches
                 if self.device == "cuda":
                     self.pipeline.enable_attention_slicing()
-                    # Only enable CPU offload if we have memory issues
-                    # self.pipeline.enable_sequential_cpu_offload()  # DISABLED - causes CPU/CUDA mismatch
+                    # Keep pipeline on CUDA, no CPU offloading to prevent xFormers issues
                 else:
                     self.pipeline.enable_attention_slicing()
                     self.pipeline.enable_sequential_cpu_offload()
@@ -394,23 +394,11 @@ class TextToImageBackend(GenerationBackend):
             if monitor:
                 monitor.update_step("Setting up autocast context")
             
-            # Generate image with proper autocast (CPU compatibility)
-            if self.device == "cuda":
-                with torch.autocast("cuda"):
-                    if monitor:
-                        monitor.update_step("Running pipeline inference")
-                    
-                    result = self.pipeline(
-                        prompt,
-                        num_inference_steps=20,
-                        guidance_scale=7.5,
-                        num_images_per_prompt=1
-                    )
-            else:
-                if monitor:
-                    monitor.update_step("Running pipeline inference (CPU mode)")
-                    
-                # CPU doesn't support autocast, use direct pipeline call
+            if monitor:
+                monitor.update_step("Running pipeline inference")
+            
+            # Use torch.inference_mode() for better performance
+            with torch.inference_mode():
                 result = self.pipeline(
                     prompt,
                     num_inference_steps=20,
