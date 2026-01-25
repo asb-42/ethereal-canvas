@@ -383,6 +383,17 @@ class TextToImageBackend(GenerationBackend):
         
         start_time = time.time()
         
+        # Simple abort check - check file flag
+        def is_aborted():
+            try:
+                import os
+                abort_file = "runtime/.abort_generation"
+                if os.path.exists(abort_file):
+                    return True
+                return False
+            except:
+                return False
+        
         try:
             self.logger.info(f"Generating image for prompt: {prompt[:50]}...")
             if monitor:
@@ -394,11 +405,21 @@ class TextToImageBackend(GenerationBackend):
             if monitor:
                 monitor.update_step("Setting up autocast context")
             
+            # Check abort before pipeline
+            if is_aborted():
+                self.logger.info("Generation aborted before pipeline start")
+                return None
+            
             if monitor:
                 monitor.update_step("Running pipeline inference")
             
             # Use torch.inference_mode() for better performance
             with torch.inference_mode():
+                # Check abort before and during pipeline
+                if is_aborted():
+                    self.logger.info("Generation aborted by user request")
+                    return None
+                
                 result = self.pipeline(
                     prompt,
                     num_inference_steps=20,
@@ -443,6 +464,16 @@ class TextToImageBackend(GenerationBackend):
             return self._generate_stub(prompt)
         
         finally:
+            # Clean up abort flag file
+            try:
+                import os
+                from pathlib import Path
+                abort_file = Path("runtime/.abort_generation")
+                if abort_file.exists():
+                    abort_file.unlink()
+            except:
+                pass
+            
             if self.logger:
                 self.logger.info("Generation attempt completed")
     

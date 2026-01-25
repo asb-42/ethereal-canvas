@@ -277,6 +277,22 @@ class ImageEditBackend:
             if monitor:
                 monitor.update_step("Running Qwen-Edit pipeline inference")
             
+            # Check for abort file (shared with T2I)
+            def is_aborted():
+                try:
+                    import os
+                    abort_file = "runtime/.abort_generation"
+                    if os.path.exists(abort_file):
+                        return True
+                    return False
+                except:
+                    return False
+            
+            # Check abort before pipeline
+            if is_aborted():
+                print("✂️ Edit aborted by user request")
+                return None
+            
             # Use torch.inference_mode() for better performance and memory usage
             if torch and hasattr(torch, 'inference_mode'):
                 inference_context = torch.inference_mode()
@@ -327,6 +343,17 @@ class ImageEditBackend:
             hash_digest = hashlib.md5(hash_input).hexdigest()
             output_path = OUTPUTS_DIR / f"failed_edit_{hash_digest[:8]}_{timestamp()}.png"
             return str(output_path)
+        
+        finally:
+            # Clean up abort flag file
+            try:
+                import os
+                from pathlib import Path
+                abort_file = Path("runtime/.abort_generation")
+                if abort_file.exists():
+                    abort_file.unlink()
+            except:
+                pass
     
     def cleanup(self):
         """Cleanup resources."""
