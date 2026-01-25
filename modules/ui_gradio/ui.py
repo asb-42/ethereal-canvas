@@ -67,6 +67,8 @@ class EtherealCanvasUI:
                 if hasattr(self, 't2i_log_component') and MONITORING_AVAILABLE:
                     status_text = self.get_status_updates()
                     self.t2i_log_component.value = status_text
+                if hasattr(self, 'edit_log_component') and MONITORING_AVAILABLE:
+                    self.edit_log_component.value = status_text
             except Exception as e:
                 print(f"Status update error: {e}")
             
@@ -104,9 +106,8 @@ class EtherealCanvasUI:
             # Execute T2I task using job runner
             result = execute_task(
                 task_type="generate",
-                prompt_text=prompt,
-                seed=seed,
-                backend_adapter=self.backend_adapter
+                prompt=prompt,
+                seed=seed
             )
             
             end_time = datetime.now()
@@ -115,10 +116,10 @@ class EtherealCanvasUI:
             if result and result != "error":
                 success_msg = self._log_message(f"✅ T2I generation completed: {result}", "SUCCESS")
                 success_msg += f"\\n⏱️ Duration: {duration:.1f}s"
-                return result, success_msg, "success"
+                return result, success_msg, "success", gr.update(visible=True)
             else:
                 error_msg = self._log_message(f"T2I generation failed: {result}", "ERROR")
-                return None, error_msg, "error"
+                return None, error_msg, "error", gr.update(visible=False)
                 
         except Exception as e:
             error_msg = self._log_message(f"T2I generation failed: {str(e)}", "ERROR")
@@ -127,7 +128,7 @@ class EtherealCanvasUI:
         finally:
             self.is_processing = False
     
-    def edit_i2i(self, image_file, prompt: str, seed: int | None = None):
+    def edit_i2i(self, image_file, prompt, seed):
         """Edit image based on prompt."""
         if self.is_processing:
             return None, self._log_message("⚠️ Another task is running. Please wait...", "ERROR"), "error"
@@ -144,13 +145,11 @@ class EtherealCanvasUI:
         try:
             self._log_message(f"🖼️ Starting I2I editing: {prompt[:50]}...")
             
-            # Execute I2I task using job runner
+# Execute T2I task using job runner
             result = execute_task(
-                task_type="edit",
+                task_type="generate",
                 prompt_text=prompt,
-                input_path=image_file,
                 seed=seed,
-                backend_adapter=self.backend_adapter
             )
             
             end_time = datetime.now()
@@ -159,10 +158,10 @@ class EtherealCanvasUI:
             if result and result != "error":
                 success_msg = self._log_message(f"✅ I2I editing completed: {result}", "SUCCESS")
                 success_msg += f"\\n⏱️ Duration: {duration:.1f}s"
-                return result, success_msg, "success"
+                return result, success_msg, "success", gr.update(visible=True)
             else:
                 error_msg = self._log_message(f"I2I editing failed: {result}", "ERROR")
-                return None, error_msg, "error"
+                return None, error_msg, "error", gr.update(visible=False)
                 
         except Exception as e:
             error_msg = self._log_message(f"I2I editing failed: {str(e)}", "ERROR")
@@ -324,6 +323,8 @@ class EtherealCanvasUI:
                     
                     edit_clear_btn.click(
                         fn=lambda: ("", None, None),
+                        outputs=[input_image, edit_prompt, edit_seed]
+                    )
                         outputs=[input_image, edit_prompt, edit_seed]
                     )
                 
