@@ -267,19 +267,6 @@ class EtherealCanvasUI:
             self.status_timer.cancel()
             self.status_timer = None
 
-        # Simple backend initialization
-        try:
-            import yaml
-            with open("config/model_config.yaml") as f:
-                config = yaml.safe_load(f)
-        except:
-            config = {
-                'generate_model': 'Qwen/Qwen-Image-2512',
-                'edit_model': 'Qwen/Qwen-Image-Edit-2511'
-            }
-
-        self.backend_adapter = BackendAdapter(config)
-    
     def create_ui(self):
         """Create the Gradio UI."""
         # Create demo without theme/css in constructor (move to launch for Gradio 6.0+)
@@ -506,16 +493,14 @@ class EtherealCanvasUI:
             )
             
             # Initial system status update
-            # Note: demo.load() moved to .ready() in newer Gradio versions
-        try:
-            demo.load(
-                fn=self.get_system_info,
-                outputs=system_info
-            )
-        except AttributeError:
-            # Fallback for newer Gradio versions
-            pass
-        
+            try:
+                demo.load(
+                    fn=self.get_system_info,
+                    outputs=system_info
+                )
+            except (AttributeError, TypeError):
+                pass
+            
         return demo
 
 # Create and launch the UI

@@ -50,7 +50,7 @@ class ImageInpaintBackend:
         """Load model using memory management system."""
         try:
             import torch
-            from diffusers import QwenImageEditPlusPipeline
+            from diffusers import DiffusionPipeline
         except ImportError as e:
             print(f"Failed to import required dependencies: {e}")
             print("Using stub implementation...")
@@ -62,9 +62,9 @@ class ImageInpaintBackend:
         print(f"Cache directory: {self.cache_dir}")
         
         try:
-            # Define loading function for memory manager
             def load_inpaint_model(**kwargs):
-                return QwenImageEditPlusPipeline.from_pretrained(
+                from diffusers import DiffusionPipeline
+                return DiffusionPipeline.from_pretrained(
                     self.model_name,
                     cache_dir=str(self.cache_dir),
                     **kwargs
@@ -113,13 +113,12 @@ class ImageInpaintBackend:
             print("Attempting aggressive memory-saving strategies...")
             
             import torch
-            from diffusers import QwenImageEditPlusPipeline
+            from diffusers import DiffusionPipeline
             
-            # Try sequential offload first
             try:
                 import os
                 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-                self.pipeline = QwenImageEditPlusPipeline.from_pretrained(
+                self.pipeline = DiffusionPipeline.from_pretrained(
                     self.model_name,
                     cache_dir=str(self.cache_dir),
                     torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
@@ -146,7 +145,7 @@ class ImageInpaintBackend:
         """Standard loading without memory management (fallback)."""
         try:
             import torch
-            from diffusers import QwenImageEditPlusPipeline
+            from diffusers import DiffusionPipeline
         except ImportError as e:
             print(f"Failed to import required dependencies: {e}")
             print("Using stub implementation...")
@@ -158,8 +157,7 @@ class ImageInpaintBackend:
         print(f"Cache directory: {self.cache_dir}")
         
         try:
-            # Load the image inpainting pipeline
-            self.pipeline = QwenImageEditPlusPipeline.from_pretrained(
+            self.pipeline = DiffusionPipeline.from_pretrained(
                 self.model_name,
                 cache_dir=str(self.cache_dir),
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
@@ -189,12 +187,21 @@ class ImageInpaintBackend:
         try:
             print(f"Inpainting with mask and prompt: {prompt[:50]}...")
             
-            # Use the image and mask directly
             input_image = image if hasattr(image, 'save') else read_image(image) if isinstance(image, str) else image
             input_mask = mask if hasattr(mask, 'save') else read_image(mask) if isinstance(mask, str) else mask
             
-            # Generate inpainted image
-            with torch.autocast(self.device):
+            import torch
+            if self.device == "cuda" and torch.cuda.is_available():
+                with torch.inference_mode():
+                    result = self.pipeline(
+                        image=input_image,
+                        mask_image=input_mask,
+                        prompt=prompt,
+                        num_inference_steps=20,
+                        guidance_scale=7.5,
+                        num_images_per_prompt=1
+                    )
+            else:
                 result = self.pipeline(
                     image=input_image,
                     mask_image=input_mask,

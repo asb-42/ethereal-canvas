@@ -48,11 +48,12 @@ def execute_task(task_type, prompt_text=None, seed=None, input_path=None, mask_p
     log_simple(f"Executing {task_type} task")
     
     try:
-        # Load backend if needed
         if not backend_adapter:
             load_backend()
         
-        # Execute task based on type
+        if backend_adapter is None:
+            raise RuntimeError("Failed to initialize backend adapter")
+        
         if task_type == "generate":
             output_path = backend_adapter.generate(prompt_text)
         elif task_type == "edit":

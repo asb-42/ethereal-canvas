@@ -334,20 +334,23 @@ class TextToImageBackend(GenerationBackend):
             os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
             os.environ["HUGGINGFACE_HUB_DISABLE_PROGRESS_BARS"] = "1"
             
-            # Use QwenImagePipeline for optimal Qwen model compatibility
+            load_kwargs = {
+                "torch_dtype": torch.float16 if self.device == "cuda" else torch.float32,
+                "use_safetensors": True,
+            }
+            
             if 'QwenImagePipeline' in globals():
                 self.pipeline = QwenImagePipeline.from_pretrained(
                     self.model_name,
                     cache_dir=str(QWEN_T2I_CACHE),
-                    **kwargs
+                    **load_kwargs
                 )
             else:
-                # Fallback to DiffusionPipeline
                 from diffusers import DiffusionPipeline
                 self.pipeline = DiffusionPipeline.from_pretrained(
                     self.model_name,
                     cache_dir=str(QWEN_T2I_CACHE),
-                    **kwargs
+                    **load_kwargs
                 )
             
             if self.device == "cuda":
@@ -435,7 +438,6 @@ class TextToImageBackend(GenerationBackend):
             from datetime import datetime
             timestamp_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             
-# Ensure output directory exists
             if monitor:
                 monitor.update_step("Saving generated image")
             

@@ -19,7 +19,10 @@ models/
 # Python artifacts
 __pycache__/
 *.pyc
+*.pyo
 .venv/
+venv/
+*.bak
 
 # OS artifacts
 .DS_Store
