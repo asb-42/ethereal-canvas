@@ -83,6 +83,25 @@ def check_port_available(port: int) -> bool:
         except OSError:
             return False
 
+def _resolve_port() -> int:
+    """Resolve the UI port: $PORT > config/server_config.yaml > 7860."""
+    env_port = os.environ.get("PORT")
+    if env_port:
+        try:
+            return int(env_port)
+        except ValueError:
+            log_message(f"Ignoring non-numeric PORT={env_port!r}, falling back to config", "WARN")
+    config_path = Path(__file__).parent / "config" / "server_config.yaml"
+    if config_path.is_file():
+        try:
+            import yaml
+            cfg = yaml.safe_load(config_path.read_text()) or {}
+            if cfg.get("port"):
+                return int(cfg["port"])
+        except Exception as e:
+            log_message(f"Could not read port from {config_path}: {e}", "WARN")
+    return 7860
+
 def launch_ui():
     """Launch Gradio UI with comprehensive error handling."""
     log_message("🚀 Starting Ethereal Canvas...")
@@ -101,11 +120,10 @@ def launch_ui():
     sys.path.insert(0, str(project_root))
     
     # Check port availability
-    default_port = 7860
-    port = default_port
+    port = _resolve_port()
     if not check_port_available(port):
         log_message(f"Port {port} is busy, trying alternatives...")
-        for alt_port in range(7861, 7870):
+        for alt_port in range(port + 1, port + 10):
             if check_port_available(alt_port):
                 port = alt_port
                 log_message(f"Using port {port}")

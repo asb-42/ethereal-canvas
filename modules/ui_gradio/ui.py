@@ -282,8 +282,15 @@ class EtherealCanvasUI:
             
             # System info
             with gr.Accordion("System Status", open=False):
-                system_info = self.get_system_info()
-                gr.JSON(value=system_info, label="Backend Information")
+                # Bind the component to a name so it can serve as an output target.
+                # The previous code kept only the data dict in `system_info` and then
+                # passed that dict as demo.load(outputs=...), which made Gradio crash
+                # later while building its config. The value stays the plain info dict,
+                # which this component renders natively.
+                system_info = gr.JSON(
+                    value=self.get_system_info(),
+                    label="Backend Information",
+                )
             
             # Main tabs
             with gr.Tabs():
@@ -493,13 +500,11 @@ class EtherealCanvasUI:
             )
             
             # Initial system status update
-            try:
-                demo.load(
-                    fn=self.get_system_info,
-                    outputs=system_info
-                )
-            except (AttributeError, TypeError):
-                pass
+            # Refresh the panel on page load. Deliberately not wrapped in
+            # try/except: the previous (AttributeError, TypeError) guard swallowed
+            # the mis-wired outputs= above and let it surface later, as a crash
+            # during config build.
+            demo.load(fn=self.get_system_info, outputs=[system_info])
             
         return demo
 
