@@ -26,3 +26,7 @@ venv/
 
 # OS artifacts
 .DS_Store
+
+# Virtualenvs (any suffix)
+.venv*/
+venv*/
