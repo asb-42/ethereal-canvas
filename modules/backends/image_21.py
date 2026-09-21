@@ -1,0 +1,226 @@
+"""
+Backend for the unified Qwen-Image 2.1 checkpoint.
+
+One checkpoint serves text-to-image, image editing, multi-reference composition
+and RGBA output, which is why this class deliberately spans the roles the
+2512/2511 pair splits across two backends.
+
+It needs the pinned development build of diffusers held in .venv-qi21 (see
+requirements_qi21.txt): the 0.36 release has no QwenImage21Pipeline at all.
+Every diffusers import is therefore deferred to load() and this module stays
+importable under the older interpreter, so a checkout running the legacy stack
+can still list the tab and fail with an actionable message instead of failing
+to import.
+"""
+import os
+from typing import Any, Dict, List, Optional, Union
+
+import torch
+from PIL import Image
+
+import logging
+
+from modules.runtime import model_access
+
+
+logger = logging.getLogger(__name__)
+
+PIPELINE_CLASS = "QwenImage21Pipeline"
+
+#: The card's own recommended working resolution for edits. The library default
+#: is 1024, well below what the checkpoint is tuned for.
+RECOMMENDED_EDIT_RESOLUTION = 2048
+LIBRARY_DEFAULT_RESOLUTION = 1024
+
+#: The card fixes both of these; the library defaults already agree with them,
+#: but they are stated so a future library default change cannot silently
+#: undo the tuning.
+NUM_INFERENCE_STEPS = 40
+TRUE_CFG_SCALE = 1.0
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    return os.environ.get(name, str(int(default))).strip().lower() in (
+        "1", "true", "yes", "on")
+
+
+class QwenImage21Backend:
+    """Unified generation and editing against Qwen-Image 2.1."""
+
+    #: Naming variants the adapter checks, for consistency with its siblings.
+    SUPPORTS_NEGATIVE_PROMPT = True
+    supports_negative_prompt = True
+
+    def __init__(self, model_name: str = "Qwen/Qwen-Image-2.1",
+                 device: str = "cuda", dtype: str = "bfloat16"):
+        self.model_name = model_name
+        self.pipeline = None
+        self.device = device if torch.cuda.is_available() else "cpu"
+        self.dtype = getattr(torch, dtype, torch.bfloat16)
+        self.is_loaded = False
+
+    # ------------------------------------------------------------------ load
+    def load(self) -> bool:
+        """
+        Fetch and prepare the checkpoint.
+
+        Refuses before touching the network unless the upstream terms have been
+        accepted on this machine; see scripts/accept_model_license.py.
+        """
+        model_access.require(self.model_name)
+
+        import diffusers
+        pipeline_class = getattr(diffusers, PIPELINE_CLASS, None)
+        if pipeline_class is None:
+            raise RuntimeError(
+                f"this checkout cannot serve {self.model_name}: the installed "
+                f"diffusers ({diffusers.__version__}) has no {PIPELINE_CLASS}. "
+                f"Build the pinned environment first: ./scripts/setup_qi21_env.sh "
+                f"and launch with EC_PYTHON=.venv-qi21 ./scripts/run.sh")
+
+        logger.info(f"Loading {PIPELINE_CLASS} {self.model_name}")
+        self.pipeline = pipeline_class.from_pretrained(
+            self.model_name, torch_dtype=self.dtype)
+        self.pipeline = self.pipeline.to(self.device)
+
+        # The DiT attention path is the sharpest memory spike on a single GPU.
+        self.pipeline.enable_attention_slicing()
+
+        # Free hand over VRAM: stage components on the CPU in dependency order.
+        if _env_flag("EC_QI21_SEQUENTIAL_CPU_OFFLOAD"):
+            order = os.environ.get(
+                "EC_QI21_OFFLOAD_ORDER", "text_encoder->transformer->vae")
+            self.pipeline.enable_model_cpu_offload(
+                weights_on_gpu=True, gpu_memory_reserve_bytes=1_000_000_000,
+                model_cpu_offload_seq=order)
+            logger.info(f"Sequential CPU offload enabled ({order})")
+
+        self.is_loaded = True
+        logger.info(f"{self.model_name} loaded on {self.device}")
+        return True
+
+    # ------------------------------------------------------------- generation
+    def generate_image(self, prompt: str,
+                       negative_prompt: Optional[str] = None,
+                       width: Optional[int] = None,
+                       height: Optional[int] = None,
+                       num_steps: int = NUM_INFERENCE_STEPS,
+                       seed: Optional[int] = None,
+                       num_images_per_prompt: int = 1,
+                       output_resolution: Optional[int] = None,
+                       output_type: str = "pil") -> List[Any]:
+        """Synthesise images from text alone."""
+        if isinstance(prompt, (list, tuple)) and len(prompt) > 1:
+            raise ValueError(
+                "Qwen-Image 2.1 applies every image in `image` to every prompt, "
+                "so a multi-prompt batch has no defined pairing. Generate one "
+                "prompt at a time.")
+        return self._call(
+            prompt=prompt, image=None, negative_prompt=negative_prompt,
+            num_steps=num_steps, seed=seed, width=width, height=height,
+            num_images_per_prompt=num_images_per_prompt,
+            output_resolution=output_resolution, output_type=output_type)
+
+    # ---------------------------------------------------------------- editing
+    def edit_images(self, image_sources: List[Image.Image], prompt: str,
+                    strength: float = None,
+                    negative_prompt: Optional[str] = None,
+                    num_steps: int = NUM_INFERENCE_STEPS,
+                    seed: Optional[int] = None,
+                    reference_images: Optional[List[Image.Image]] = None,
+                    output_resolution: Optional[int] = None,
+                    output_type: str = "pil") -> List[Any]:
+        """
+        Edit, or compose from, one to ten reference images.
+
+        `strength` exists only for signature compatibility with the 2511 edit
+        backend: this is a flow-matching model with a fixed schedule and no
+        denoising-strength knob, so a value here is reported and ignored.
+        """
+        images: List[Image.Image] = [
+            img for img in (image_sources or []) if img is not None]
+        if reference_images:
+            images += [img for img in reference_images if img is not None]
+        if not images:
+            raise ValueError(
+                "no source image supplied; Qwen-Image 2.1 editing needs at "
+                "least one reference image")
+        if len(images) > 10:
+            raise ValueError(
+                f"{len(images)} reference images given, the checkpoint takes at "
+                f"most 10")
+        if strength is not None:
+            logger.info(
+                f"strength={strength} ignored: Qwen-Image 2.1 is a "
+                f"flow-matching model with a fixed schedule")
+
+        return self._call(
+            prompt=prompt, image=images if len(images) > 1 else images[0],
+            negative_prompt=negative_prompt, num_steps=num_steps, seed=seed,
+            output_resolution=output_resolution or RECOMMENDED_EDIT_RESOLUTION,
+            output_type=output_type)
+
+    # ------------------------------------------------------------- shared call
+    def _call(self, **kwargs: Any) -> List[Any]:
+        """Run the pipeline, passing only the keyword arguments it accepts."""
+        if self.pipeline is None and not self.load():
+            raise RuntimeError("pipeline unavailable after load")
+
+        negative_prompt = kwargs.pop("negative_prompt", None)
+        num_steps = kwargs.pop("num_steps", NUM_INFERENCE_STEPS)
+        seed = kwargs.pop("seed", None)
+
+        call_kwargs: Dict[str, Any] = {
+            "num_inference_steps": int(num_steps),
+            # Flow matching: values above 1.0 degrade output. The former edit
+            # backend's guidance defaults must not leak in here.
+            "true_cfg_scale": TRUE_CFG_SCALE,
+            **kwargs,
+        }
+        if negative_prompt:
+            call_kwargs["negative_prompt"] = negative_prompt
+
+        if seed is not None:
+            # torch.manual_seed seeds globally and takes no generator; the
+            # per-call path is a Generator seeded itself, which is also what
+            # makes the result reproducible.
+            generator = torch.Generator(device=self.device)
+            generator.manual_seed(int(seed))
+            call_kwargs["generator"] = generator
+            # The card ties bit-for-bit reproducibility to disabling the KV
+            # cache, so pin it off whenever a seed is in play.
+            call_kwargs["use_kv_cache"] = _env_flag("EC_QI21_KV_CACHE", False)
+
+        # Iterating Signature.parameters yields names, not Parameter objects.
+        import inspect as _inspect
+        valid = set(self.pipeline.__call__.__annotations__) | set(
+            _inspect.signature(self.pipeline.__call__).parameters)
+        dropped = set(call_kwargs) - valid
+        if dropped:
+            logger.warning(f"dropping unsupported arguments: {sorted(dropped)}")
+            call_kwargs = {k: v for k, v in call_kwargs.items()
+                           if k in valid}
+
+        try:
+            result = self.pipeline(**call_kwargs)
+        except ValueError as exc:
+            # Precomputed prompt embeddings cannot be combined with the image
+            # padding mask path; surface that rather than masking it.
+            raise RuntimeError(f"Qwen-Image 2.1 generation failed: {exc}") from exc
+
+        images = getattr(result, "images", None)
+        if images is None:
+            images = getattr(result, "images_list", None) or []
+        return list(images)
+
+    # ---------------------------------------------------------------- release
+    def release(self) -> None:
+        """Free the checkpoint, including the components the offload keeps pinned."""
+        if self.pipeline is not None:
+            del self.pipeline
+            self.pipeline = None
+        self.is_loaded = False
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            if hasattr(torch.cuda, "synchronize"):
+                torch.cuda.synchronize()

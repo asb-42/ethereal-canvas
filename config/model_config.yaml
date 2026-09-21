@@ -2,6 +2,19 @@
 # Runtime-compliant with Opencode hygiene.
 
 # Available models
+# To run the unified Qwen-Image 2.1 release, point generate_model and
+# edit_model at it:
+#
+#   generate_model: "Qwen/Qwen-Image-2.1"
+#   edit_model: "Qwen/Qwen-Image-2.1"
+#
+# It is a single checkpoint that serves text-to-image, editing, multi-reference
+# composition and RGBA, so one name replaces the pair above. Two conditions
+# apply: it requires the pinned environment from scripts/setup_qi21_env.sh
+# (launch with EC_PYTHON=.venv-qi21 ./scripts/run.sh), and its weights are
+# licensed separately - accept the upstream terms with
+# scripts/accept_model_license.py or the app will refuse to fetch them.
+# The default is deliberately left on the validated 2512/2511 pair.
 available_models:
   text_to_image:
     id: "text-to-image"

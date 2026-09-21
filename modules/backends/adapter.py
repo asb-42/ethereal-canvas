@@ -31,12 +31,28 @@ class BackendAdapter:
             'inpaint': None,
         }
     
+    def _t2i_backend(self, model_name: str):
+        """Pick the class that can actually serve this model name."""
+        from modules.runtime.paths import is_qwen_image_21
+        if is_qwen_image_21(model_name):
+            from .image_21 import QwenImage21Backend
+            return QwenImage21Backend(model_name)
+        return TextToImageBackend(model_name)
+
+    def _edit_backend(self, model_name: str):
+        """Pick the class that can actually serve this model name."""
+        from modules.runtime.paths import is_qwen_image_21
+        if is_qwen_image_21(model_name):
+            from .image_21 import QwenImage21Backend
+            return QwenImage21Backend(model_name)
+        return ImageEditBackend(model_name)
+
     def _get_t2i_backend(self):
         """Lazy load T2I backend."""
         if self.backends['t2i'] is None:
             try:
                 print("🔧 Loading T2I backend on demand...")
-                self.backends['t2i'] = TextToImageBackend(self.t2i_model)
+                self.backends['t2i'] = self._t2i_backend(self.t2i_model)
                 self.backends['t2i'].load()
                 print("✅ T2I backend loaded successfully")
             except Exception as e:
@@ -53,7 +69,7 @@ class BackendAdapter:
         if self.backends['edit'] is None:
             try:
                 print("🔧 Loading Edit backend on demand...")
-                self.backends['edit'] = ImageEditBackend(self.edit_model)
+                self.backends['edit'] = self._edit_backend(self.edit_model)
                 self.backends['edit'].load()
                 print("✅ Edit backend loaded successfully")
             except Exception as e:

@@ -28,6 +28,15 @@ TMP_DIR = RUNTIME_ROOT / "tmp"
 MODEL_CACHE_DIR = RUNTIME_ROOT / ".." / "models"
 QWEN_T2I_CACHE = MODEL_CACHE_DIR / "Qwen-Image-2512"
 QWEN_I2I_CACHE = MODEL_CACHE_DIR / "Qwen-Image-Edit-2511"
+# The 2.1 release is one checkpoint for both roles, so it gets a cache entry of
+# its own rather than being squeezed under either legacy name.
+QWEN_QI21_CACHE = MODEL_CACHE_DIR / "Qwen-Image-2.1"
+QWEN_QI21_MODEL_ID = "Qwen/Qwen-Image-2.1"
+
+def is_qwen_image_21(model_name: str) -> bool:
+    """Whether this name is the unified Qwen-Image 2.1 release."""
+    return bool(model_name) and "Qwen-Image-2.1" in model_name
+
 
 # -------------------------------------------------
 # Helper functions

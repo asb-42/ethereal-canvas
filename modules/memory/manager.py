@@ -241,10 +241,31 @@ class MemoryManager:
         except:
             return 0.0
     
+    #: Qwen-Image 2.1 is published at roughly 44 GiB on disk against the
+    #: 2511 pair's ~58 GiB, and it is one checkpoint rather than two, so the
+    #: legacy table overstates it. These figures are derived from that
+    #: published footprint and stay UNCALIBRATED until a real run on the
+    #: 128 GB box; replace them with measured peaks, not these estimates.
+    QI21_BASE_REQUIREMENTS = {
+        "transformer": 13500,
+        "text_encoder": 14000,
+        "vae": 400,
+        "activations": 6000,
+        "overhead": 1500,
+    }
+
+    def _base_requirements(self, model_name: str):
+        """Per-checkpoint component estimates, None for the legacy default."""
+        from modules.runtime.paths import is_qwen_image_21
+        if is_qwen_image_21(model_name):
+            return dict(self.QI21_BASE_REQUIREMENTS)
+        return None
+
     def estimate_required_memory(self, model_name: str) -> Dict[str, float]:
         """Estimate memory requirements for different strategies."""
         # Base estimates for Qwen-Image-Edit-2511 (approximately)
-        base_requirements = {
+        base_requirements = self._base_requirements(model_name)
+        base_requirements = base_requirements or {
             "transformer": 8000,  # MB for main transformer
             "text_encoder": 2000,  # MB for text encoder
             "vae": 1000,  # MB for VAE if present

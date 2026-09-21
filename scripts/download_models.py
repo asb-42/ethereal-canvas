@@ -101,7 +101,8 @@ def main():
     # Models to download
     models = [
         "Qwen/Qwen-Image-2512",  # Text-to-image model
-        "Qwen/Qwen-Image-Edit-2511"  # Image editing model
+        "Qwen/Qwen-Image-Edit-2511",  # Image editing model
+        "Qwen/Qwen-Image-2.1",  # Unified 2.1 release (needs .venv-qi21)
     ]
     
     success_count = 0
