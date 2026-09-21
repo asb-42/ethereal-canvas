@@ -10,6 +10,10 @@ import time
 from pathlib import Path
 import hashlib
 from datetime import datetime
+#: This script is run from the repository root, which is not on sys.path when it
+#: is executed as a file, so the package imports below would not resolve.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from modules.runtime import model_access
 
 def log_message(message: str):
