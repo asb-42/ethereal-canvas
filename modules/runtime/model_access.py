@@ -67,7 +67,17 @@ MODEL_LICENSES = {
 # terms. It is read per model, so it does not let an unknown model through.
 ENV_ACCEPTED = "EC_MODEL_LICENSE_ACCEPTED"
 
-ACCEPTANCE_FILE = Path("runtime") / "model_license_acceptances.json"
+#: Where acceptances are recorded.
+#:
+#: Anchored to the repository root, not the working directory: with a relative
+#: path an operator could accept the terms while sitting in one directory and
+#: still be refused when launching the app from another, which reads as the gate
+#: ignoring them. EC_MODEL_LICENSE_FILE relocates it, so tests and CI can use a
+#: throwaway store instead of the operator's real one.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ENV_LICENSE_FILE = "EC_MODEL_LICENSE_FILE"
+ACCEPTANCE_FILE = Path(os.environ.get(ENV_LICENSE_FILE)
+                       or REPO_ROOT / "runtime" / "model_license_acceptances.json")
 
 
 # -------------------------------------------------
