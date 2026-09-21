@@ -16,6 +16,7 @@ except ImportError:
 from modules.img_read.reader import read_image
 from modules.img_write.writer import write_image
 from modules.runtime.paths import output_inpaint_path
+from modules.runtime import model_access
 
 
 # Pipeline classes, in the order they are worth trying.
@@ -108,6 +109,8 @@ class ImageInpaintBackend:
     def _load_pretrained(self, **kwargs):
 
         """Load the checkpoint with the first pipeline class that accepts it."""
+        # Weights belong to the upstream and are licensed by them: refuse before any fetch.
+        model_access.require(self.model_name)
 
         import diffusers
 

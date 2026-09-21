@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 from datetime import datetime
+from modules.runtime import model_access
 
 # Import memory management
 try:
@@ -164,6 +165,8 @@ class TextToImageBackend(GenerationBackend):
     
     def load(self) -> None:
         """Load the Qwen text-to-image model with memory management."""
+        # Weights belong to the upstream and are licensed by them: refuse before any fetch.
+        model_access.require(self.model_name)
         if self.loaded:
             self.logger.info("Model already loaded")
             return

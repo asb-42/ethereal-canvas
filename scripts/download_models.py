@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 import hashlib
 from datetime import datetime
+from modules.runtime import model_access
 
 def log_message(message: str):
     """Simple logging function."""
@@ -48,6 +49,8 @@ def verify_model_directory(model_dir: Path) -> bool:
 
 def download_qwen_model(model_name: str, cache_dir: Path) -> bool:
     """Download a Qwen model using huggingface_hub."""
+    # Weights belong to the upstream and are licensed by them: refuse before any fetch.
+    model_access.require(model_name)
     try:
         from huggingface_hub import snapshot_download
         import transformers

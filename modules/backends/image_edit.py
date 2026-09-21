@@ -29,6 +29,7 @@ except ImportError:
 
 from modules.img_read.reader import read_image
 from modules.img_write.writer import write_image
+from modules.runtime import model_access
 
 
 class ImageEditBackend:
@@ -54,6 +55,8 @@ class ImageEditBackend:
     
     def load(self):
         """Load the Qwen image editing model with memory management."""
+        # Weights belong to the upstream and are licensed by them: refuse before any fetch.
+        model_access.require(self.model_name)
         if self.loaded:
             return
         

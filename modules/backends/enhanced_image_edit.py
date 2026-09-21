@@ -12,6 +12,7 @@ from datetime import datetime
 from modules.memory import memory_manager, memory_profiler, LoadStrategy, profile_memory_usage, retry_on_oom
 from modules.img_read.reader import read_image
 from modules.img_write.writer import write_image
+from modules.runtime import model_access
 
 
 class EnhancedImageEditBackend:
@@ -46,6 +47,8 @@ class EnhancedImageEditBackend:
     
     def _load_model_with_diffusers(self, **kwargs):
         """Load model using diffusers pipeline."""
+        # Weights belong to the upstream and are licensed by them: refuse before any fetch.
+        model_access.require(self.model_name)
         try:
             from diffusers import QwenImageEditPipeline
         except ImportError:
