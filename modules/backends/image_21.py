@@ -252,7 +252,8 @@ class QwenImage21Backend:
                        seed: Optional[int] = None,
                        num_images_per_prompt: int = 1,
                        output_resolution: Optional[int] = None,
-                       output_type: str = "pil") -> List[Any]:
+                       output_type: str = "pil",
+                       text_encoder: Optional[str] = None) -> List[Any]:
         """Synthesise images from text alone."""
         if isinstance(prompt, (list, tuple)) and len(prompt) > 1:
             raise ValueError(
@@ -266,7 +267,8 @@ class QwenImage21Backend:
             prompt=prompt, image=None, negative_prompt=negative_prompt,
             num_steps=num_steps, seed=seed, width=width, height=height,
             num_images_per_prompt=num_images_per_prompt,
-            output_resolution=output_resolution, output_type=output_type)
+            output_resolution=output_resolution, output_type=output_type,
+            text_encoder=text_encoder)
 
     # ---------------------------------------------------------------- editing
     def edit_images(self, image_sources: List[Image.Image], prompt: str,
@@ -276,7 +278,8 @@ class QwenImage21Backend:
                     seed: Optional[int] = None,
                     reference_images: Optional[List[Image.Image]] = None,
                     output_resolution: Optional[int] = None,
-                    output_type: str = "pil") -> List[Any]:
+                    output_type: str = "pil",
+                    text_encoder: Optional[str] = None) -> List[Any]:
         """
         Edit, or compose from, one to ten reference images.
 
@@ -305,7 +308,7 @@ class QwenImage21Backend:
             prompt=prompt, image=images if len(images) > 1 else images[0],
             negative_prompt=negative_prompt, num_steps=num_steps, seed=seed,
             output_resolution=output_resolution or RECOMMENDED_EDIT_RESOLUTION,
-            output_type=output_type)
+            output_type=output_type, text_encoder=text_encoder)
 
     # ------------------------------------------------------------- shared call
     def _call(self, **kwargs: Any) -> List[Any]:
