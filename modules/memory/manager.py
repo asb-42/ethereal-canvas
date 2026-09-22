@@ -241,16 +241,34 @@ class MemoryManager:
         except:
             return 0.0
     
-    #: Qwen-Image 2.1 is published at roughly 44 GiB on disk against the
-    #: 2511 pair's ~58 GiB, and it is one checkpoint rather than two, so the
-    #: legacy table overstates it. These figures are derived from that
-    #: published footprint and stay UNCALIBRATED until a real run on the
-    #: 128 GB box; replace them with measured peaks, not these estimates.
+    #: Qwen-Image 2.1 resident requirements, calibrated on the GB10 box
+    #: (121.6 GiB device, torch 2.14.0+cu130, diffusers 0.41.0.dev0 @ 80c7ed2,
+    #: 40 inference steps, attention slicing on, no CPU offload).
+    #:
+    #: Component figures are hard facts, not estimates: transformer 14230249472 B
+    #: and text_encoder 17534247392 B come from the checkpoints'
+    #: *.safetensors.index.json total_size fields, vae 1350989512 B from the
+    #: resolved blob. The Heretic abliteration is the same architecture and
+    #: parameter count (8.77B), so this table holds for both encoder variants.
+    #:
+    #: Activations + overhead is the remainder of the measured whole-device
+    #: peak (torch.cuda.mem_get_info sampler, 200 ms cadence) at 1024x1024:
+    #: 118.309 GiB peak - 31581 MB weights - 1500 MB overhead = ~88068 MB.
+    #: That peak is device-wide, so it includes the CUDA context and the
+    #: caching allocator's reserved blocks, not just live tensors; treat the
+    #: activations line as "everything above weights", not as pure tensors.
+    #:
+    #: Known oddity, kept honest rather than smoothed: peaks plateau from 768
+    #: upward (118.083 / 118.309 / 118.220 GiB at 768 / 1024 / 2048) instead
+    #: of scaling with latent area, while 512 sits clearly lower (109.537).
+    #: The 2048 T2I and single-reference 2048 edit (114.591) both completed,
+    #: so the plateau is not an OOM cliff, but its mechanism is unexplained -
+    #: do not extrapolate this table past 2048 or to other step counts.
     QI21_BASE_REQUIREMENTS = {
-        "transformer": 13500,
-        "text_encoder": 14000,
-        "vae": 400,
-        "activations": 6000,
+        "transformer": 13571,
+        "text_encoder": 16722,
+        "vae": 1288,
+        "activations": 88068,
         "overhead": 1500,
     }
 
