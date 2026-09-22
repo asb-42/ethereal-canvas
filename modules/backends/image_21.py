@@ -173,14 +173,27 @@ class QwenImage21Backend:
         return True
 
     # ------------------------------------------------------- text encoder swap
+    def _encoder_source(self, variant: str):
+        """(model_id, subdir) holding ``variant``'s weights on disk.
+
+        Stock lives as the text_encoder subfolder of the 2.1 diffusers
+        snapshot; Heretic is a standalone transformers checkpoint.
+        """
+        from modules.runtime.paths import QWEN_QI21_MODEL_ID
+
+        if variant == "heretic":
+            return HERETIC_MODEL_ID, None
+        return QWEN_QI21_MODEL_ID, "text_encoder"
+
     def _ensure_text_encoder(self, variant: str) -> None:
         """Carry ``variant`` ("stock" or "heretic") on the live pipeline.
 
-        Stock needs no work: it is what from_pretrained installed. Heretic is
-        loaded from the local snapshot and swapped in place, so switching costs
-        one 17.5 GiB encoder load, not a second full pipeline. Anything
-        unrecognised, unlicensed, or absent from disk raises with the command
-        that fixes it rather than silently rendering with the wrong encoder.
+        Either direction loads from the local snapshot and swaps in place
+        (freeing the outgoing encoder first), so switching costs one ~17 GiB
+        encoder load, not a second full pipeline and never a UI restart.
+        Anything unrecognised, unlicensed, or absent from disk raises with
+        the command that fixes it rather than silently rendering with the
+        wrong encoder.
         """
         want = (variant or "stock").strip().lower()
         if want not in TEXT_ENCODER_VARIANTS:
@@ -192,29 +205,27 @@ class QwenImage21Backend:
         if self.pipeline is None and not self.load():
             raise RuntimeError("pipeline unavailable after load")
 
-        if want == "stock":
-            raise RuntimeError(
-                "switching back to the stock encoder needs a fresh load: "
-                "restart the UI (or release() this backend) rather than "
-                "re-fetching 17.5 GiB of stock weights that were overwritten "
-                "in memory")
-        model_access.require(HERETIC_MODEL_ID)
+        model_id, subdir = self._encoder_source(want)
+        model_access.require(model_id)
 
         from modules.backends.prompt_rewriter import _local_snapshot
-        snap = _local_snapshot(HERETIC_MODEL_ID, require_weights=True)
-        if snap is None:
+        snap = _local_snapshot(model_id, require_weights=True)
+        if subdir:
+            snap = snap / subdir if snap is not None else None
+        if snap is None or not snap.is_dir():
             raise RuntimeError(
-                f"Heretic encoder is not on disk; fetch it with: "
-                f"python scripts/download_models.py --model {HERETIC_MODEL_ID} "
+                f"{want} encoder is not on disk; fetch it with: "
+                f"python scripts/download_models.py --model {model_id} "
                 f"(after accepting its terms: "
                 f"python scripts/accept_model_license.py "
-                f"--model {HERETIC_MODEL_ID} --yes)")
+                f"--model {model_id} --yes)")
 
         from transformers import Qwen3VLForConditionalGeneration
-        # Free the stock encoder BEFORE loading Heretic: the old order held
-        # both (~34 GiB) plus the DiT at once, which is the highest transient
-        # peak in the app on a 121.6 GiB device. Dropping the reference and
-        # emptying the cache first keeps the swap under the inference peak.
+        # Free the outgoing encoder BEFORE loading the incoming one: the old
+        # order held both (~34 GiB) plus the DiT at once, which is the
+        # highest transient peak in the app on a 121.6 GiB device. Dropping
+        # the reference and emptying the cache first keeps the swap under
+        # the inference peak.
         import gc
         old = self.pipeline.text_encoder
         self.pipeline.text_encoder = None
@@ -224,7 +235,7 @@ class QwenImage21Backend:
             torch.cuda.empty_cache()
             if hasattr(torch.cuda, "synchronize"):
                 torch.cuda.synchronize()
-        logger.info(f"Loading Heretic text encoder from {snap}")
+        logger.info(f"Loading {want} text encoder from {snap}")
         enc = Qwen3VLForConditionalGeneration.from_pretrained(
             str(snap), dtype=self.dtype,
             device_map="auto", local_files_only=True).eval()
@@ -236,8 +247,8 @@ class QwenImage21Backend:
             self.pipeline.enable_model_cpu_offload()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        self.text_encoder_variant = "heretic"
-        logger.info("Heretic text encoder now serving")
+        self.text_encoder_variant = want
+        logger.info(f"{want} text encoder now serving")
 
     # ------------------------------------------------------------- generation
     # --------------------------------------------------------------------------
