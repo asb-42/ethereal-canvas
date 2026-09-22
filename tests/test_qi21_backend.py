@@ -152,7 +152,11 @@ est = lambda m: mm.estimate_required_memory(m)["fp16_full"]
 n21 = est(paths.QWEN_QI21_MODEL_ID)
 old = est("Qwen/Qwen-Image-Edit-2511")
 check("memory: 2.1 gets its own estimate", n21 != old, f"2.1={n21:.0f}MB legacy={old:.0f}MB")
-check("memory: 2.1 estimate is inside the published 44 GiB", n21 < 44 * 1024)
+# Calibrated on the GB10 box: the fp16 total must bracket the measured
+# 118.309 GiB whole-device peak at 1024 squared, 40 steps. The old bound
+# (published 44 GiB disk footprint) described the download, not residency.
+check("memory: 2.1 estimate brackets the measured 118.3 GiB peak",
+      117 * 1024 < n21 < 120 * 1024, f"2.1={n21:.0f}MB")
 check("memory: 2.1 estimate is not the legacy table copied", n21 > old)
 check("paths: unified cache dir", paths.QWEN_QI21_CACHE.name == "Qwen-Image-2.1")
 
