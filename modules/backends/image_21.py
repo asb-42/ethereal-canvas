@@ -58,6 +58,10 @@ class QwenImage21Backend:
         self.device = device if torch.cuda.is_available() else "cpu"
         self.dtype = getattr(torch, dtype, torch.bfloat16)
         self.is_loaded = False
+        # The companion prompt-expansion model, loaded on first use only when the
+        # feature is switched on. Kept here rather than module-global so two
+        # backends do not silently share a GPU resident 9B.
+        self._prompt_rewriter = None
 
     # ------------------------------------------------------------------ load
     def load(self) -> bool:
@@ -79,8 +83,18 @@ class QwenImage21Backend:
                 f"and launch with EC_PYTHON=.venv-qi21 ./scripts/run.sh")
 
         logger.info(f"Loading {PIPELINE_CLASS} {self.model_name}")
+        # cache_dir is what makes a pre-fetched checkpoint count. Every sibling
+        # backend passes it; without it from_pretrained resolves the repo id
+        # against the ambient hub cache, so a weights tree placed under
+        # models/Qwen-Image-2.1 is invisible and the load silently re-fetches
+        # ~31 GiB over the network instead of using what is already on disk.
+        from modules.runtime.paths import model_cache_dir_for
+
+        cache_dir = model_cache_dir_for(self.model_name)
+        if cache_dir.is_dir():
+            logger.info(f"using local weights at {cache_dir}")
         self.pipeline = pipeline_class.from_pretrained(
-            self.model_name, torch_dtype=self.dtype)
+            self.model_name, cache_dir=str(cache_dir), torch_dtype=self.dtype)
         self.pipeline = self.pipeline.to(self.device)
 
         # The DiT attention path is the sharpest memory spike on a single GPU.
@@ -100,6 +114,60 @@ class QwenImage21Backend:
         return True
 
     # ------------------------------------------------------------- generation
+    # --------------------------------------------------------------------------
+    # Prompt rewriting
+    # --------------------------------------------------------------------------
+    def _rewriter(self):
+        """The shared rewriter for this backend, or None when it is switched off.
+
+        The instance is held on the backend so a second generation does not pay
+        for a second 9B load, and so memory accounting can see it.
+        """
+        from modules.backends.prompt_rewriter import PromptRewriter
+
+        if self._prompt_rewriter is None:
+            self._prompt_rewriter = PromptRewriter()
+        return self._prompt_rewriter
+
+    def _maybe_rewrite(self, prompt: str,
+                       width: Optional[int], height: Optional[int]):
+        """Expand ``prompt`` through the companion rewriter when it is enabled.
+
+        Upstream ships the 2.1 release with a separate prompt-expansion model and
+        documents it as the way to get the release's best output; the image
+        pipeline itself has no hook for it, so consulting it is this backend's
+        job. It is opt-in because it is a second model resident on the GPU.
+
+        An explicit ``width``/``height`` from the caller always wins over the
+        rewriter's recommendation: asking for a size is a decision the rewriter
+        should not undo.
+
+        Any failure returns the original prompt. A text model having a bad day
+        must not cost the user an image.
+        """
+        from modules.backends import prompt_rewriter as pr
+
+        if not pr.rewriter_enabled():
+            return prompt, width, height
+
+        rw = self._rewriter()
+        if not rw.available:
+            logger.warning(
+                f"prompt rewriter enabled but {rw.model_id} is not on disk; "
+                f"generating from the prompt as written")
+            return prompt, width, height
+
+        result = rw.rewrite(prompt)
+        if result is None:
+            return prompt, width, height
+
+        logger.info(
+            f"prompt rewritten ({len(result.prompt)} chars, "
+            f"ratio={result.wh_ratio or 'none'})")
+        if width is None and height is None and result.width:
+            return result.prompt, result.width, result.height
+        return result.prompt, width, height
+
     def generate_image(self, prompt: str,
                        negative_prompt: Optional[str] = None,
                        width: Optional[int] = None,
@@ -115,6 +183,9 @@ class QwenImage21Backend:
                 "Qwen-Image 2.1 applies every image in `image` to every prompt, "
                 "so a multi-prompt batch has no defined pairing. Generate one "
                 "prompt at a time.")
+
+        prompt, width, height = self._maybe_rewrite(prompt, width, height)
+
         return self._call(
             prompt=prompt, image=None, negative_prompt=negative_prompt,
             num_steps=num_steps, seed=seed, width=width, height=height,
@@ -179,6 +250,14 @@ class QwenImage21Backend:
         }
         if negative_prompt:
             call_kwargs["negative_prompt"] = negative_prompt
+        # An explicit None must not clobber a pipeline default. The UI path
+        # sends output_resolution=None (no size control in the form yet), and
+        # the pipeline resolves sizes as `width or output_resolution` with a
+        # default of 1024. Passing None through turns both into None and dies
+        # in check_inputs with `None % int`.
+        for key in ("output_resolution", "width", "height"):
+            if call_kwargs.get(key) is None:
+                call_kwargs.pop(key, None)
 
         if seed is not None:
             # torch.manual_seed seeds globally and takes no generator; the
@@ -212,6 +291,41 @@ class QwenImage21Backend:
         if images is None:
             images = getattr(result, "images_list", None) or []
         return list(images)
+
+    # ------------------------------------------------------- adapter contract
+    # The adapter (and through it the UI) speaks the legacy pair's language:
+    # generate(prompt) / edit(prompt, input_path) returning a file path.
+    # This backend natively speaks generate_image / edit_images returning PIL
+    # images, so these shims translate. Without them the 2.1 route dies with
+    # AttributeError the moment the UI calls it.
+    def _persist(self, image: Image.Image, prefix: str) -> str:
+        from modules.runtime.paths import OUTPUTS_DIR, timestamp
+
+        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        path = OUTPUTS_DIR / f"{prefix}_{timestamp()}.png"
+        image.save(path)
+        return str(path)
+
+    def generate(self, prompt: str, seed: Optional[int] = None,
+                 **kwargs: Any) -> str:
+        """Legacy-contract wrapper around generate_image."""
+        images = self.generate_image(prompt=prompt, seed=seed, **kwargs)
+        if not images:
+            raise RuntimeError("Qwen-Image 2.1 returned no images")
+        return self._persist(images[0], "qi21_t2i")
+
+    def edit(self, prompt: str, input_path: Union[str, Any],
+             seed: Optional[int] = None, **kwargs: Any) -> str:
+        """Legacy-contract wrapper around edit_images."""
+        path = (input_path.name if hasattr(input_path, "name")
+                else str(input_path))
+        with Image.open(path) as img:
+            ref = img.convert("RGB")
+            ref.load()
+        images = self.edit_images([ref], prompt, seed=seed, **kwargs)
+        if not images:
+            raise RuntimeError("Qwen-Image 2.1 returned no images")
+        return self._persist(images[0], "qi21_edit")
 
     # ---------------------------------------------------------------- release
     def release(self) -> None:

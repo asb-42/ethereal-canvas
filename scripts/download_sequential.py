@@ -55,6 +55,12 @@ def download_file_sequential(url: str, local_path: Path, chunk_size: int = 8192)
 
 def download_qwen_model_sequential(model_name: str, cache_dir: Path) -> bool:
     """Download Qwen model sequentially."""
+    # Nothing in this tree may reach the network for weights before the operator
+    # has accepted that model's terms. This script is unreferenced by the
+    # application, but it performs the same fetch, and a fetch path that skips
+    # the gate is one an edited model list walks straight past it.
+    from modules.runtime import model_access
+    model_access.require(model_name)
     try:
         log_message(f"🔄 Starting sequential download of {model_name}")
         
@@ -66,7 +72,6 @@ def download_qwen_model_sequential(model_name: str, cache_dir: Path) -> bool:
         downloaded_path = snapshot_download(
             repo_id=model_name,
             cache_dir=str(cache_dir),
-            resume_download=True,
             local_files_only=False,
             max_workers=1  # Force sequential
         )

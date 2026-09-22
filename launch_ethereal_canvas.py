@@ -16,6 +16,11 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 os.environ["CUDA_MODULE_LOADING"] = "LAZY"  
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,expandable_segments:True"
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+# torch's native Triton override of aten::bmm needs Python.h, which is absent
+# on this box (no python3.12-dev), so the pipeline dies in a gcc compile at
+# the first denoise step. Disabling the native JIT avoids that path entirely;
+# validated together with the Qwen-Image 2.1 default.
+os.environ.setdefault("TORCH_DISABLE_NATIVE_JIT", "1")
 
 # Import warnings suppression
 warnings.filterwarnings("ignore", message=".*UserWarning: CUDA is not available.*") 

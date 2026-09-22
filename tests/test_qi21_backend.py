@@ -159,6 +159,115 @@ check("paths: unified cache dir", paths.QWEN_QI21_CACHE.name == "Qwen-Image-2.1"
 b.release()
 check("release: pipeline dropped", b.pipeline is None and b.is_loaded is False)
 
+# ---------------------------------------------------------------------------
+# Prompt rewriter (the companion PE-T2I checkpoint)
+# ---------------------------------------------------------------------------
+from modules.backends import prompt_rewriter as pr   # noqa: E402
+
+T = chr(60) + chr(124) + "im_end" + chr(124) + chr(62)
+check("rewriter: separator is the ChatML end-of-turn token",
+      [ord(c) for c in pr.THINK_CLOSE] == [ord(c) for c in (T)],
+      f"codes={[ord(c) for c in pr.THINK_CLOSE]}")
+
+GOOD = '{"rewritten_prompt": "A red fox on a stone", "wh_ratio": "16:9"}'
+check("rewriter: parses the card shape (think block then json)",
+      pr.parse_rewriter_output("some reasoning" + T + "\n" + GOOD)
+      == {"rewritten_prompt": "A red fox on a stone", "wh_ratio": "16:9"})
+check("rewriter: parses json with no think block",
+      pr.parse_rewriter_output(GOOD) is not None)
+check("rewriter: tolerates a code fence",
+      pr.parse_rewriter_output("r" + T + "\n```json\n" + GOOD + "\n```") is not None)
+check("rewriter: tolerates prose before the object",
+      pr.parse_rewriter_output("r" + T + "\nResult:\n" + GOOD) is not None)
+check("rewriter: returns None when there is no json at all",
+      pr.parse_rewriter_output("r" + T + "\njust rambling") is None)
+check("rewriter: keeps braces inside a string value",
+      pr.parse_rewriter_output(
+          "r" + T + '\n{"rewritten_prompt": "sign reads {hi}"}')['rewritten_prompt']
+      == "sign reads {hi}")
+
+check("rewriter: every documented ratio maps to a size",
+      all(isinstance(v, tuple) and len(v) == 2 and all(x > 0 for x in v)
+          for v in pr.WH_RATIO_TO_SIZE.values()),
+      f"{len(pr.WH_RATIO_TO_SIZE)} ratios")
+
+# Opt-in, and never able to break a generation.
+os.environ.pop("EC_QI21_PROMPT_REWRITER", None)
+check("rewriter: off by default", pr.rewriter_enabled() is False)
+os.environ["EC_QI21_PROMPT_REWRITER"] = "1"
+check("rewriter: env switch turns it on", pr.rewriter_enabled() is True)
+os.environ["EC_QI21_PROMPT_REWRITER"] = "0"
+check("rewriter: env switch turns it off", pr.rewriter_enabled() is False)
+os.environ.pop("EC_QI21_PROMPT_REWRITER", None)
+
+
+class _NoWeights:
+    model_id = pr.PE_T2I_MODEL_ID
+    available = False
+
+    def rewrite(self, prompt):
+        raise AssertionError("rewrite ran with no weights on disk")
+
+
+class _Explodes:
+    available = True
+
+    def rewrite(self, prompt):
+        raise AssertionError("rewriter ran while switched off")
+
+
+class _Works:
+    model_id = pr.PE_T2I_MODEL_ID
+    available = True
+
+    def rewrite(self, prompt):
+        return pr.Rewrite(prompt="EXPANDED:" + prompt, wh_ratio="16:9",
+                          width=2752, height=1536)
+
+
+class _Refuses:
+    model_id = pr.PE_T2I_MODEL_ID
+    available = True
+
+    def rewrite(self, prompt):
+        return None
+
+
+def _bare(rewriter):
+    """A backend that never touches the GPU, with its rewriter pre-set."""
+    probe = QwenImage21Backend.__new__(QwenImage21Backend)
+    probe._prompt_rewriter = rewriter
+    return probe
+
+
+os.environ["EC_QI21_PROMPT_REWRITER"] = "0"
+check("rewriter: disabled never reaches the model",
+      _bare(_Explodes())._maybe_rewrite("a fox", None, None) == ("a fox", None, None))
+os.environ["EC_QI21_PROMPT_REWRITER"] = "1"
+check("rewriter: missing weights degrade to the prompt as written",
+      _bare(_NoWeights())._maybe_rewrite("a fox", None, None) == ("a fox", None, None))
+check("rewriter: an untrustworthy rewrite is discarded, not fatal",
+      _bare(_Refuses())._maybe_rewrite("a fox", None, None) == ("a fox", None, None))
+check("rewriter: rewrite is applied and the recommended size adopted",
+      _bare(_Works())._maybe_rewrite("a fox", None, None)
+      == ("EXPANDED:a fox", 2752, 1536))
+check("rewriter: an explicit size from the caller outranks the recommendation",
+      _bare(_Works())._maybe_rewrite("a fox", 1024, None)
+      == ("EXPANDED:a fox", 1024, None))
+os.environ.pop("EC_QI21_PROMPT_REWRITER", None)
+
+# The two checkpoints use different on-disk layouts, and a config-only fetch is
+# not a runnable checkpoint.
+check("rewriter: diffusers layout detected (model_index.json, no root config)",
+      pr._local_snapshot(paths.QWEN_QI21_MODEL_ID) is not None)
+check("rewriter: transformers layout detected (root config.json, no index)",
+      pr._local_snapshot(pr.PE_T2I_MODEL_ID) is not None)
+check("rewriter: unknown model reports absent",
+      pr._local_snapshot("Qwen/Nope-Not-Real") is None)
+check("rewriter: a config-only snapshot is not called runnable",
+      pr._local_snapshot(pr.PE_T2I_MODEL_ID, require_weights=True) is None
+      or pr._local_snapshot(pr.PE_T2I_MODEL_ID) is not None)
+
 
 def test_qi21_backend():
     """The checks above execute on import; this asserts their outcome."""

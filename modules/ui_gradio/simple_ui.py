@@ -26,16 +26,12 @@ class SimpleEtherealCanvasUI:
     
     def _initialize_backend(self):
         """Initialize backend adapter."""
-        try:
-            import yaml
-            with open("config/model_config.yaml") as f:
-                config = yaml.safe_load(f)
-        except:
-            config = {
-                'generate_model': 'Qwen/Qwen-Image-2512',
-                'edit_model': 'Qwen/Qwen-Image-Edit-2511'
-            }
-        
+        # Read deliberately outside the try below: a configuration that cannot
+        # be read must stop the launch, not be swallowed into the generic
+        # "Failed to initialize backend" tuple that __init__ discards.
+        from modules.runtime.paths import load_model_config
+        config = load_model_config()
+
         try:
             self.backend_adapter = BackendAdapter(config)
             self.backend_adapter.load()

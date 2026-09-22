@@ -11,8 +11,16 @@ import os
 
 # -------------------------------------------------
 # Canonical runtime root
+#
+# Anchored to the repository root rather than the working directory. A relative
+# ``Path("runtime")`` made every cache path below resolve against whatever
+# directory the process happened to start in, so the downloader and the loader
+# only agreed when both were launched from the repo root. scripts/run.sh does
+# cd there, but scripts/download_models.py is run as a file from anywhere, and
+# the two then wrote and read different trees.
 # -------------------------------------------------
-RUNTIME_ROOT = Path("runtime")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RUNTIME_ROOT = Path(os.environ.get("EC_RUNTIME_ROOT") or REPO_ROOT / "runtime")
 
 # -------------------------------------------------
 # Runtime directories
@@ -25,7 +33,7 @@ TMP_DIR = RUNTIME_ROOT / "tmp"
 # -------------------------------------------------
 # Model cache directories
 # -------------------------------------------------
-MODEL_CACHE_DIR = RUNTIME_ROOT / ".." / "models"
+MODEL_CACHE_DIR = REPO_ROOT / "models"
 QWEN_T2I_CACHE = MODEL_CACHE_DIR / "Qwen-Image-2512"
 QWEN_I2I_CACHE = MODEL_CACHE_DIR / "Qwen-Image-Edit-2511"
 # The 2.1 release is one checkpoint for both roles, so it gets a cache entry of
@@ -85,6 +93,68 @@ def model_cache_path(model_name: str) -> Path:
     """Generate model cache path."""
     ensure_runtime_dirs()
     return MODEL_CACHE_DIR / model_name
+
+
+def model_cache_dir_for(model_name: str) -> Path:
+    """Where the weights for ``model_name`` belong on disk.
+
+    Single source of truth for the download side and the load side. Both used
+    to derive the location independently, which is how the 2.1 backend ended up
+    reading from the ambient hub cache while the downloader wrote elsewhere.
+    Accepts the bare directory name as well as the ``Org/Name`` form.
+    """
+    from modules.runtime.model_access import normalize_model_id
+
+    key = normalize_model_id(model_name)
+    tail = key.split("/", 1)[1] if "/" in key else key
+    return MODEL_CACHE_DIR / tail
+
+
+def config_path() -> Path:
+    """The model configuration file to read.
+
+    Defaults to the committed ``config/model_config.yaml``. ``EC_MODEL_CONFIG``
+    points the application at a different file, which is how an operator runs the
+    2.1 release without editing the committed default that every other user gets.
+    """
+    override = os.environ.get("EC_MODEL_CONFIG")
+    if override:
+        return Path(override).expanduser().resolve()
+    return REPO_ROOT / "config" / "model_config.yaml"
+
+
+def load_model_config() -> dict:
+    """Read the model configuration, or say plainly why it could not be read.
+
+    The three call sites each opened a relative ``config/model_config.yaml``
+    inside a bare ``except:``, falling back to the 2512/2511 pair on any error at
+    all. A typo in an override, a malformed file, or running from another
+    directory therefore did not fail: it quietly served the legacy pair, so a
+    run meant to prove the 2.1 backend could report on the legacy one without a
+    word of complaint. An explicit override that cannot be read is now fatal.
+    """
+    import yaml
+
+    path = config_path()
+    overridden = bool(os.environ.get("EC_MODEL_CONFIG"))
+    if not path.is_file():
+        if overridden:
+            raise FileNotFoundError(
+                f"EC_MODEL_CONFIG points at {path}, which does not exist")
+        raise FileNotFoundError(
+            f"no model configuration at {path}; run the application from the "
+            f"repository root or set EC_MODEL_CONFIG")
+
+    try:
+        data = yaml.safe_load(path.read_text())
+    except Exception as exc:
+        raise ValueError(f"unreadable model configuration {path}: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"model configuration {path} did not parse to a mapping "
+            f"(got {type(data).__name__})")
+    return data
 
 def cleanup_temp_files() -> None:
     """Clean all temporary files older than 1 hour."""

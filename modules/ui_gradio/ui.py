@@ -38,15 +38,11 @@ class EtherealCanvasUI:
         self.abort_requested = False
 
         # Simple backend initialization
-        try:
-            import yaml
-            with open("config/model_config.yaml") as f:
-                config = yaml.safe_load(f)
-        except:
-            config = {
-                'generate_model': 'Qwen/Qwen-Image-2512',
-                'edit_model': 'Qwen/Qwen-Image-Edit-2511'
-            }
+        # Read deliberately outside the try below: a configuration that cannot
+        # be read must stop the launch, not be swallowed into the generic
+        # "Failed to initialize backend" tuple that __init__ discards.
+        from modules.runtime.paths import load_model_config
+        config = load_model_config()
 
         try:
             self.backend_adapter = BackendAdapter(config)
@@ -298,7 +294,7 @@ class EtherealCanvasUI:
                 # Tab 1: Generate (T2I)
                 with gr.TabItem("🖼️ Generate", id="generate"):
                     gr.Markdown("### Text-to-Image Generation")
-                    gr.Markdown("Generate images from text descriptions using Qwen-Image-2512")
+                    gr.Markdown(f"Generate images from text descriptions using {self.backend_adapter.t2i_model if self.backend_adapter else 'Qwen-Image-2512'}")
                     
                     with gr.Row():
                         with gr.Column(scale=3):
@@ -355,7 +351,7 @@ class EtherealCanvasUI:
                 # Tab 2: Edit (I2I)
                 with gr.TabItem("✏️ Edit", id="edit"):
                     gr.Markdown("### Image-to-Image Editing")
-                    gr.Markdown("Edit existing images using Qwen-Image-Edit-2511")
+                    gr.Markdown(f"Edit existing images using {self.backend_adapter.edit_model if self.backend_adapter else 'Qwen-Image-Edit-2511'}")
                     
                     with gr.Row():
                         with gr.Column(scale=3):
@@ -416,9 +412,11 @@ class EtherealCanvasUI:
                     self.edit_log_component = edit_log
             
             # Footer
-            gr.Markdown("""
+            _t2i = self.backend_adapter.t2i_model if self.backend_adapter else "Qwen-Image-2512"
+            _edit = self.backend_adapter.edit_model if self.backend_adapter else "Qwen-Image-Edit-2511"
+            gr.Markdown(f"""
             ---
-            **Models**: Qwen-Image-2512 (Generation) | Qwen-Image-Edit-2511 (Editing)
+            **Models**: {_t2i} (Generation) | {_edit} (Editing)
             """)
             
             # Event handlers

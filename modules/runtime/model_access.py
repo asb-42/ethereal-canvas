@@ -49,6 +49,19 @@ MODEL_LICENSES = {
         "license": "Qwen Research License Agreement",
         "url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE",
     },
+    # The prompt rewriters are separate checkpoints under their own card, not
+    # part of the image model, so they need entries of their own: an unlisted
+    # model is treated as needing review and stays locked. Their terms are read
+    # from the card front matter (license: other, license_name: qwen-research)
+    # and the LICENSE file each ships, not inferred from the image model.
+    "Qwen/Qwen-Image-2.1-PE-T2I": {
+        "license": "Qwen Research License Agreement",
+        "url": "https://huggingface.co/Qwen/Qwen-Image-2.1-PE-T2I/blob/main/LICENSE",
+    },
+    "Qwen/Qwen-Image-2.1-PE-I2I": {
+        "license": "Qwen Research License Agreement",
+        "url": "https://huggingface.co/Qwen/Qwen-Image-2.1-PE-I2I/blob/main/LICENSE",
+    },
     "Qwen/Qwen-Image-2512": {
         # Verified from the upstream model card (cardData.license = apache-2.0,
         # gated = false) rather than assumed.
@@ -94,9 +107,15 @@ def normalize_model_id(model_id: str) -> str:
         known_lowered = known.casefold()
         if lowered == known_lowered:
             return known
-        # A bare "Qwen-Image-2.1", a cache directory name, or a local path
-        # ending in the repo name all mean the same checkpoint.
-        if lowered.endswith("/" + known.split("/", 1)[1].casefold()):
+        # A cache directory name, or a local path ending in the repo name.
+        tail = known.split("/", 1)[1].casefold()
+        if lowered.endswith("/" + tail):
+            return known
+        # A truly bare name, which is how the CLI and the config files spell it.
+        # The case above needs a separator before the tail, so the plain
+        # "Qwen-Image-2.1" it documents fell through and was treated as an
+        # unknown checkpoint.
+        if lowered == tail:
             return known
     return raw
 

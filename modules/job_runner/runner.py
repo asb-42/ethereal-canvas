@@ -17,15 +17,9 @@ from modules.backends.adapter import BackendAdapter
 log_session_header()
 
 # Load configuration
-try:
-    with open("config/model_config.yaml") as f:
-        MODEL_CONFIG = yaml.safe_load(f)
-except FileNotFoundError:
-    MODEL_CONFIG = {
-        'text_to_image_model': 'default-t2i',
-        'image_edit_model': 'default-edit', 
-        'image_inpaint_model': 'default-inpaint'
-    }
+from modules.runtime.paths import load_model_config
+
+MODEL_CONFIG = load_model_config()
 
 # Initialize backend adapter
 backend_adapter = BackendAdapter(MODEL_CONFIG)

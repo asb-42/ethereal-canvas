@@ -1,3 +1,20 @@
+# Qwen-Image 2.1 selection overlay.
+#
+# Kept for reference: config/model_config.yaml now carries these keys itself,
+# so a plain ./scripts/run.sh serves 2.1. Point EC_MODEL_CONFIG here explicitly
+# only to pin the selection regardless of future default changes:
+#
+#   EC_MODEL_CONFIG=$PWD/config/model_config.qi21.yaml EC_PYTHON=.venv-qi21 \
+#       ./scripts/run.sh
+#
+# BackendAdapter reads generate_model / edit_model and routes either name to
+# the unified 2.1 backend, so one checkpoint serves generation and editing.
+#
+# Requires: scripts/setup_qi21_env.sh environment, and the weights accepted via
+#   scripts/accept_model_license.py --model Qwen/Qwen-Image-2.1 --yes
+#
+# Everything below matches the committed default.
+
 # Model configuration for Ethereal Canvas.
 # Runtime-compliant with Opencode hygiene.
 
@@ -117,11 +134,6 @@ metadata:
     logs: "90_days"    # keep logs for 90 days
     cache: "unlimited"  # until disk space needed
     temp: "1_hour"    # temp files cleaned hourly
-# Selector keys read by BackendAdapter. The unified Qwen-Image 2.1 release is
-# now the default: one checkpoint serves generation and editing (needs the
-# .venv-qi21 environment from scripts/setup_qi21_env.sh and an accepted
-# upstream licence via scripts/accept_model_license.py --model
-# Qwen/Qwen-Image-2.1 --yes). Override with EC_MODEL_CONFIG to run the
-# legacy 2512/2511 pair instead.
+# Selector keys read by BackendAdapter (see the note at the top of this file).
 generate_model: "Qwen/Qwen-Image-2.1"
 edit_model: "Qwen/Qwen-Image-2.1"
