@@ -115,6 +115,13 @@ class QwenImage21Backend:
         # This snapshot's enable_model_cpu_offload takes no tuning kwargs
         # (no weights_on_gpu / memory-reserve / order arguments exist here),
         # so call it bare; extra kwargs die with TypeError at load.
+        #
+        # Measured verdict on the GB10 (unified 128 GB package, 1024 squared,
+        # Heretic encoder): offload changes the peak from 118.3 to 119.0 GiB
+        # (noise) while slowing inference ~6x (50s -> 315s). CPU and GPU share
+        # the same memory here, so relocating weights cannot move the
+        # device-side counter. Leave this OFF on unified-memory boxes; it
+        # exists for discrete GPUs with small VRAM and large system RAM.
         if _env_flag("EC_QI21_SEQUENTIAL_CPU_OFFLOAD"):
             self.pipeline.enable_model_cpu_offload()
             logger.info("Sequential CPU offload enabled")
