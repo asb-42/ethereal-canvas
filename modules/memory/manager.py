@@ -270,6 +270,13 @@ class MemoryManager:
     #: The 2048 T2I and single-reference 2048 edit (114.591) both completed,
     #: so the plateau is not an OOM cliff, but its mechanism is unexplained -
     #: do not extrapolate this table past 2048 or to other step counts.
+    #:
+    #: Allocator sensitivity, 2026-09-22: a single 1024 run under
+    #: max_split_size_mb:512 WITHOUT expandable_segments peaked at 94.6 GiB
+    #: instead of 118.3 (same weights, same steps). The table above keeps the
+    #: conservative 118.3 figures until that repeats; if it holds, the whole
+    #: table recalibrates down ~24 GiB and the 121.6 GiB device gains real
+    #: headroom. Do not quote 94.6 as established yet (n=1).
     QI21_BASE_REQUIREMENTS = {
         "transformer": 13571,
         "text_encoder": 16722,
