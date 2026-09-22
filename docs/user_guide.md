@@ -1,98 +1,57 @@
 # User Guide
 
-## Installation
+## What it runs
 
-### End User (Pinokio One-Click Installer)
+Ethereal Canvas serves the unified **Qwen-Image 2.1** checkpoint for both
+tabs: text-to-image generation and image editing. One 31 GiB download, one
+pipeline, shared across tabs after the first load.
 
-Ethereal Canvas is designed to be installed **directly from the Pinokio platform**. There is no need to manually clone or configure the repository.
+Requirements: NVIDIA GPU with ~120 GiB (GB10 class), the `.venv-qi21`
+environment (`scripts/setup_qi21_env.sh`), and an accepted upstream licence
+(`scripts/accept_model_license.py --model Qwen/Qwen-Image-2.1 --yes`).
 
-1. Open the **Pinokio application** on your system.
-2. Navigate to the **Pinokio Apps catalog**.
-3. Locate **"Ethereal Canvas"** and click **"Install"** or **"One-Click Installer"** button.
-4. Wait while Pinokio downloads the app, sets up all dependencies, and configures the environment automatically.
-5. Once installation completes, **launch Ethereal Canvas directly from within Pinokio**.
-
-> **Note:** The One-Click Installer handles all system setup, including Python environments, required libraries, and runtime configuration.
-
-### Developer Setup (Optional)
-
-If you intend to **inspect, modify, or contribute** to the codebase, you can set up a local development environment.
-
-1. Clone the repository from GitHub:
+## Launch
 
 ```bash
-git clone https://github.com/asb-42/ethereal-canvas.git
+EC_PYTHON=$PWD/.venv-qi21/bin/python ./scripts/run.sh
 ```
 
-2. Enter the repository directory:
+UI at `http://<host>:7860`. First use of either tab loads the pipeline
+(~4 min); it stays resident afterwards.
 
-```bash
-cd ethereal-canvas
-```
+## Generate tab
 
-3. Set up a Python virtual environment (venv or conda):
+- **Prompt** + optional **seed** (same prompt + seed = identical pixels).
+- **Text encoder**: Stock, or Heretic (abliterated community encoder for
+  prompts the stock encoder refuses; needs its own 17.5 GiB download).
+  Switching back to stock needs a UI restart.
+- **Image size**: presets with measured wall times at 40 steps
+  (512² ~13s … 1024² ~1 min … 2048² ~4 min). `Auto` lets the prompt
+  rewriter recommend a size, else 1024².
+- **Expand prompt (PE-T2I rewriter)**: 18 GiB companion model, reloaded per
+  run to protect VRAM. Best quality per upstream; costs ~1–2 min extra.
+- Progress streams in the Status Log (`Denoising step i/40`).
 
-```bash
-# Example using venv
-python3 -m venv .venv
-source .venv/bin/activate
+## Edit tab
 
-# Install required dependencies
-pip install -r requirements.txt
-```
+Upload an image, describe the change. Same encoder switcher. Output
+resolution 1024 (faster) or 2048 (card recommended, ~7 min measured).
+Strength is accepted and ignored — 2.1 is flow-matching with a fixed
+schedule.
 
-4. Launch the application locally for testing:
+## Memory reality (GB10, 121.6 GiB device)
 
-```bash
-python run_ethereal_canvas.py
-```
-
-**Important:** This workflow is intended for developers only. End users should always use the Pinokio One-Click Installer.
-
-## Launching the App
-
-The Gradio UI will be available on the configured port (default: 7860). You can access it from your browser.
-
-## Text → Image
-
-1. Enter a descriptive prompt in the text box
-2. Optionally set a seed for reproducible results
-3. Click "Generate"
-4. The generated image will appear in the output panel
-
-## Image → Image
-
-1. Upload an image using the file input
-2. Enter your editing prompt
-3. Optionally set a seed
-4. Click "Edit"
-5. The edited image will be shown
-
-## Seeds & Reproducibility
-
-- Seeds control the random generation process
-- Same prompt + same seed = identical output
-- Leave seed empty for random generation
-- Seeds are logged for traceability
-
-## Output Metadata
-
-Every generated image includes embedded metadata:
-- Original prompt
-- Seed used
-- Model version
-- Generation parameters
-
-## Logs & Audit Trail
-
-All operations are logged in `logs/runlog.md`:
-- Structured markdown format
-- Git-committed after each operation
-- Includes system fingerprint
-- Complete audit trail for reproducibility
+Full pipeline inference peaks ~118–119 GiB. Sequential CPU offload does
+not help on unified-memory boxes (measured: same peak, 6x slower) and
+defaults off. If a run dies, the Status Log names the cause; the most
+common transient is holding two encoders at once, which the app avoids by
+freeing before swapping.
 
 ## Troubleshooting
 
-- **Port already in use**: Change PORT environment variable or stop conflicting services
-- **CUDA out of memory**: Restart the application to clear GPU memory
-- **Model loading fails**: Check internet connection and run install script again
+- **Port in use**: `PORT=7861 ... ./scripts/run.sh`.
+- **Licence refusal**: run the accept command above; acceptances live in
+  gitignored `runtime/model_license_acceptances.json`, one per machine.
+- **Triton/gcc failure at step 1**: the launcher already sets
+  `TORCH_DISABLE_NATIVE_JIT=1`; if you launch otherwise, set it yourself.
+- Outputs land in `runtime/outputs/` (gitignored).
