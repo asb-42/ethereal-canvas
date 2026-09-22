@@ -47,9 +47,30 @@ class BackendAdapter:
             return QwenImage21Backend(model_name)
         return ImageEditBackend(model_name)
 
+    def _shared_21_instance(self):
+        """An already-loaded unified backend serving the same checkpoint.
+
+        The 2.1 release is one checkpoint for both roles, so when both roles
+        name it there is no reason to hold it twice: a second load costs
+        another ~4 minutes and another ~31 GiB of residency. Returns the
+        shared QwenImage21Backend, or None when the roles name different
+        checkpoints (legacy pair) or nothing suitable is loaded yet.
+        """
+        for key in ("t2i", "edit"):
+            backend = self.backends.get(key)
+            if (backend is not None and hasattr(backend, "generate_image")
+                    and self.t2i_model == self.edit_model
+                    and backend.model_name == self.t2i_model):
+                return backend
+        return None
+
     def _get_t2i_backend(self):
         """Lazy load T2I backend."""
         if self.backends['t2i'] is None:
+            shared = self._shared_21_instance()
+            if shared is not None:
+                self.backends['t2i'] = shared
+                return shared
             try:
                 print("🔧 Loading T2I backend on demand...")
                 self.backends['t2i'] = self._t2i_backend(self.t2i_model)
@@ -72,6 +93,10 @@ class BackendAdapter:
     def _get_edit_backend(self):
         """Lazy load edit backend."""
         if self.backends['edit'] is None:
+            shared = self._shared_21_instance()
+            if shared is not None:
+                self.backends['edit'] = shared
+                return shared
             try:
                 print("🔧 Loading Edit backend on demand...")
                 self.backends['edit'] = self._edit_backend(self.edit_model)
@@ -151,5 +176,8 @@ class BackendAdapter:
             'edit_model': self.edit_model,
             'inpaint_model': self.inpaint_model,
             'inpaint_loaded': self.backends.get('inpaint') is not None,
+            'shared_21_pipeline': (
+                self.backends.get('t2i') is not None
+                and self.backends.get('t2i') is self.backends.get('edit')),
             'lazy_loading': True
         }
