@@ -220,7 +220,8 @@ class QwenImage21Backend:
         return self._prompt_rewriter
 
     def _maybe_rewrite(self, prompt: str,
-                       width: Optional[int], height: Optional[int]):
+                       width: Optional[int], height: Optional[int],
+                       force: Optional[bool] = None):
         """Expand ``prompt`` through the companion rewriter when it is enabled.
 
         Upstream ships the 2.1 release with a separate prompt-expansion model and
@@ -228,16 +229,24 @@ class QwenImage21Backend:
         pipeline itself has no hook for it, so consulting it is this backend's
         job. It is opt-in because it is a second model resident on the GPU.
 
+        ``force`` is the per-generation UI toggle (True/False); when None the
+        launch-wide EC_QI21_PROMPT_REWRITER / config switch decides.
+
         An explicit ``width``/``height`` from the caller always wins over the
         rewriter's recommendation: asking for a size is a decision the rewriter
         should not undo.
 
         Any failure returns the original prompt. A text model having a bad day
         must not cost the user an image.
+
+        The rewriter is released after every use rather than kept resident:
+        18 GiB held through a ~118 GiB inference peak does not fit a
+        121.6 GiB device, so each rewrite pays a reload instead of risking OOM.
         """
         from modules.backends import prompt_rewriter as pr
 
-        if not pr.rewriter_enabled():
+        active = force if force is not None else pr.rewriter_enabled()
+        if not active:
             return prompt, width, height
 
         rw = self._rewriter()
@@ -248,6 +257,14 @@ class QwenImage21Backend:
             return prompt, width, height
 
         result = rw.rewrite(prompt)
+        release = getattr(rw, "release", None)
+        if callable(release):
+            try:
+                release()
+            except Exception:
+                pass
+            if self._prompt_rewriter is rw:
+                self._prompt_rewriter = None
         if result is None:
             return prompt, width, height
 
@@ -267,7 +284,9 @@ class QwenImage21Backend:
                        num_images_per_prompt: int = 1,
                        output_resolution: Optional[int] = None,
                        output_type: str = "pil",
-                       text_encoder: Optional[str] = None) -> List[Any]:
+                       text_encoder: Optional[str] = None,
+                       prompt_rewrite: Optional[str] = None,
+                       progress_cb: Any = None) -> List[Any]:
         """Synthesise images from text alone."""
         if isinstance(prompt, (list, tuple)) and len(prompt) > 1:
             raise ValueError(
@@ -275,14 +294,19 @@ class QwenImage21Backend:
                 "so a multi-prompt batch has no defined pairing. Generate one "
                 "prompt at a time.")
 
-        prompt, width, height = self._maybe_rewrite(prompt, width, height)
+        force = None
+        if prompt_rewrite is not None:
+            force = str(prompt_rewrite).strip().lower() in (
+                "1", "true", "yes", "on")
+        prompt, width, height = self._maybe_rewrite(
+            prompt, width, height, force=force)
 
         return self._call(
             prompt=prompt, image=None, negative_prompt=negative_prompt,
             num_steps=num_steps, seed=seed, width=width, height=height,
             num_images_per_prompt=num_images_per_prompt,
             output_resolution=output_resolution, output_type=output_type,
-            text_encoder=text_encoder)
+            text_encoder=text_encoder, progress_cb=progress_cb)
 
     # ---------------------------------------------------------------- editing
     def edit_images(self, image_sources: List[Image.Image], prompt: str,
@@ -293,7 +317,8 @@ class QwenImage21Backend:
                     reference_images: Optional[List[Image.Image]] = None,
                     output_resolution: Optional[int] = None,
                     output_type: str = "pil",
-                    text_encoder: Optional[str] = None) -> List[Any]:
+                    text_encoder: Optional[str] = None,
+                    progress_cb: Any = None) -> List[Any]:
         """
         Edit, or compose from, one to ten reference images.
 
@@ -322,12 +347,14 @@ class QwenImage21Backend:
             prompt=prompt, image=images if len(images) > 1 else images[0],
             negative_prompt=negative_prompt, num_steps=num_steps, seed=seed,
             output_resolution=output_resolution or RECOMMENDED_EDIT_RESOLUTION,
-            output_type=output_type, text_encoder=text_encoder)
+            output_type=output_type, text_encoder=text_encoder,
+            progress_cb=progress_cb)
 
     # ------------------------------------------------------------- shared call
     def _call(self, **kwargs: Any) -> List[Any]:
         """Run the pipeline, passing only the keyword arguments it accepts."""
         variant = kwargs.pop("text_encoder", None)
+        progress_cb = kwargs.pop("progress_cb", None)
         if self.pipeline is None and not self.load():
             raise RuntimeError("pipeline unavailable after load")
         if variant:
@@ -370,6 +397,24 @@ class QwenImage21Backend:
             # cache, so pin it off whenever a seed is in play.
             call_kwargs["use_kv_cache"] = _env_flag("EC_QI21_KV_CACHE", False)
 
+        if progress_cb is not None:
+            # Real step progress for the UI: the pipeline calls this after
+            # every denoising step. It must return the kwargs dict untouched
+            # (the loop pops latents/prompt_embeds out of it), and it must
+            # never raise - a progress reporter must not kill a render.
+            # Deliberately step counts only, no latent previews: a VAE decode
+            # per step costs seconds and gigabytes on this device.
+            total_steps = int(num_steps)
+
+            def _step_cb(pipe, i, t, cb_kwargs):
+                try:
+                    progress_cb(int(i) + 1, total_steps)
+                except Exception:
+                    pass
+                return cb_kwargs
+
+            call_kwargs["callback_on_step_end"] = _step_cb
+
         # Iterating Signature.parameters yields names, not Parameter objects.
         import inspect as _inspect
         valid = set(self.pipeline.__call__.__annotations__) | set(
@@ -407,22 +452,25 @@ class QwenImage21Backend:
         return str(path)
 
     def generate(self, prompt: str, seed: Optional[int] = None,
-                 **kwargs: Any) -> str:
+                 progress_cb: Any = None, **kwargs: Any) -> str:
         """Legacy-contract wrapper around generate_image."""
-        images = self.generate_image(prompt=prompt, seed=seed, **kwargs)
+        images = self.generate_image(
+            prompt=prompt, seed=seed, progress_cb=progress_cb, **kwargs)
         if not images:
             raise RuntimeError("Qwen-Image 2.1 returned no images")
         return self._persist(images[0], "qi21_t2i")
 
     def edit(self, prompt: str, input_path: Union[str, Any],
-             seed: Optional[int] = None, **kwargs: Any) -> str:
+             seed: Optional[int] = None, progress_cb: Any = None,
+             **kwargs: Any) -> str:
         """Legacy-contract wrapper around edit_images."""
         path = (input_path.name if hasattr(input_path, "name")
                 else str(input_path))
         with Image.open(path) as img:
             ref = img.convert("RGB")
             ref.load()
-        images = self.edit_images([ref], prompt, seed=seed, **kwargs)
+        images = self.edit_images([ref], prompt, seed=seed,
+                                    progress_cb=progress_cb, **kwargs)
         if not images:
             raise RuntimeError("Qwen-Image 2.1 returned no images")
         return self._persist(images[0], "qi21_edit")

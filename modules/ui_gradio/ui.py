@@ -62,7 +62,9 @@ class EtherealCanvasUI:
     
     def generate_t2i(self, prompt: str, seed: int | None = None,
                      text_encoder: str | None = None,
-                     width: int | None = None, height: int | None = None):
+                     width: int | None = None, height: int | None = None,
+                     prompt_rewrite: str | None = None,
+                     progress_cb=None):
         """Generate image from text prompt."""
         if self.is_processing:
             return None, "⚠️ Another task is running. Please wait...", "error"
@@ -86,11 +88,16 @@ class EtherealCanvasUI:
             size_kwargs = {}
             if width and height:
                 size_kwargs = {"width": int(width), "height": int(height)}
+            opt_kwargs = dict(size_kwargs)
+            if text_encoder:
+                opt_kwargs["text_encoder"] = text_encoder
+            if prompt_rewrite:
+                opt_kwargs["prompt_rewrite"] = prompt_rewrite
+            if progress_cb is not None:
+                opt_kwargs["progress_cb"] = progress_cb
             if self.backend_adapter:
                 print("🔍 Testing backend adapter...")
-                result = self.backend_adapter.generate(
-                    prompt, **({"text_encoder": text_encoder} if text_encoder else {}),
-                    **size_kwargs)
+                result = self.backend_adapter.generate(prompt, **opt_kwargs)
                 print(f"🔍 Backend result: {result}")
             else:
                 print("🔍 Using task runner fallback...")
@@ -98,10 +105,12 @@ class EtherealCanvasUI:
                 if seed is not None and seed > 0:
                     result = execute_task("generate", prompt, seed=seed,
                                           text_encoder=text_encoder,
+                                          prompt_rewrite=prompt_rewrite,
                                           **size_kwargs)
                 else:
                     result = execute_task("generate", prompt,
                                           text_encoder=text_encoder,
+                                          prompt_rewrite=prompt_rewrite,
                                           **size_kwargs)
                 print(f"🔍 Task runner result: {result}")
             
@@ -156,7 +165,8 @@ class EtherealCanvasUI:
     
     def edit_i2i(self, image_file, prompt: str, seed: int | None = None,
                  text_encoder: str | None = None,
-                 output_resolution: int | None = None):
+                 output_resolution: int | None = None,
+                 progress_cb=None):
         """Edit image based on prompt."""
         if self.is_processing:
             return None, "⚠️ Another task is running. Please wait...", "error"
@@ -186,6 +196,8 @@ class EtherealCanvasUI:
             enc_kwargs = ({"text_encoder": text_encoder} if text_encoder else {})
             res_kwargs = ({"output_resolution": int(output_resolution)}
                           if output_resolution else {})
+            if progress_cb is not None:
+                res_kwargs["progress_cb"] = progress_cb
             if self.backend_adapter:
                 result = self.backend_adapter.edit(
                     prompt, image_path, **enc_kwargs, **res_kwargs)
@@ -343,7 +355,8 @@ class EtherealCanvasUI:
 
                                 t2i_size = gr.Dropdown(
                                     label="Image size",
-                                    choices=["512 × 512 (~13s)",
+                                    choices=["Auto (rewriter recommends, else 1024²)",
+                                             "512 × 512 (~13s)",
                                              "768 × 768 (~30s)",
                                              "1024 × 1024 default (~1 min)",
                                              "2048 × 2048 card recommended (~4 min)",
@@ -351,6 +364,12 @@ class EtherealCanvasUI:
                                              "9:16 tall (~4 min)"],
                                     value="1024 × 1024 default (~1 min)",
                                     info="Times measured on this box at 40 steps"
+                                )
+
+                                t2i_rewrite = gr.Checkbox(
+                                    label="Expand prompt (PE-T2I rewriter)",
+                                    value=False,
+                                    info="18 GiB companion, reloaded per run to protect VRAM"
                                 )
                                 
                                 with gr.Row():
@@ -491,6 +510,8 @@ class EtherealCanvasUI:
             }
 
             def _t2i_size(label):
+                if label and label.startswith("Auto"):
+                    return (None, None)
                 for key, size in T2I_SIZES.items():
                     if label and label.startswith(key):
                         return size
@@ -501,22 +522,45 @@ class EtherealCanvasUI:
                     return 1024
                 return 2048
 
-            def handle_generate(prompt, seed, encoder_label, size_label):
-                """Handle generate button click."""
+            def handle_generate(prompt, seed, encoder_label, size_label, rewrite_on):
+                """Handle generate button click, streaming step progress."""
+                import time
                 width, height = _t2i_size(size_label)
-                image_path, log_msg, status = self.generate_t2i(
-                    prompt, seed, text_encoder=_variant(encoder_label),
-                    width=width, height=height)
-                
+                variant = _variant(encoder_label)
+                rw = "on" if rewrite_on else None
+                state = {"step": 0, "total": 40}
+                box = {}
+
+                def work():
+                    box["out"] = self.generate_t2i(
+                        prompt, seed, text_encoder=variant,
+                        width=width, height=height, prompt_rewrite=rw,
+                        progress_cb=lambda s, t: state.update(step=s, total=t))
+
+                th = threading.Thread(target=work, daemon=True)
+                th.start()
+                while th.is_alive():
+                    s, t = state["step"], state["total"]
+                    if s > 0:
+                        msg = f"Denoising step {s}/{t} ..."
+                    else:
+                        msg = "Loading model / expanding prompt ..."
+                    yield (None, self._log_message(msg, "INFO"),
+                           gr.update(visible=False),
+                           gr.update(interactive=False))
+                    time.sleep(2)
+                th.join()
+
+                image_path, log_msg, status = box["out"]
                 if status == "success" and image_path and os.path.exists(image_path):
-                    return (
+                    yield (
                         image_path,           # image
                         log_msg,              # log
                         gr.update(value=image_path, visible=True),  # download
                         gr.update(interactive=False)  # disable button
                     )
                 else:
-                    return (
+                    yield (
                         None,                 # image
                         log_msg,              # log
                         gr.update(visible=False),           # download
@@ -524,20 +568,43 @@ class EtherealCanvasUI:
                     )
             
             def handle_edit(image, prompt, seed, encoder_label, size_label):
-                """Handle edit button click."""
-                image_path, log_msg, status = self.edit_i2i(
-                    image, prompt, seed, text_encoder=_variant(encoder_label),
-                    output_resolution=_edit_size(size_label))
-                
+                """Handle edit button click, streaming step progress."""
+                import time
+                variant = _variant(encoder_label)
+                resolution = _edit_size(size_label)
+                state = {"step": 0, "total": 40}
+                box = {}
+
+                def work():
+                    box["out"] = self.edit_i2i(
+                        image, prompt, seed, text_encoder=variant,
+                        output_resolution=resolution,
+                        progress_cb=lambda s, t: state.update(step=s, total=t))
+
+                th = threading.Thread(target=work, daemon=True)
+                th.start()
+                while th.is_alive():
+                    s, t = state["step"], state["total"]
+                    if s > 0:
+                        msg = f"Denoising step {s}/{t} ..."
+                    else:
+                        msg = "Loading model / preparing edit ..."
+                    yield (None, self._log_message(msg, "INFO"),
+                           gr.update(visible=False),
+                           gr.update(interactive=False))
+                    time.sleep(2)
+                th.join()
+
+                image_path, log_msg, status = box["out"]
                 if status == "success" and image_path and os.path.exists(image_path):
-                    return (
+                    yield (
                         image_path,           # image
                         log_msg,              # log
                         gr.update(value=image_path, visible=True),  # download
                         gr.update(interactive=False)  # disable button
                     )
                 else:
-                    return (
+                    yield (
                         None,                 # image
                         log_msg,              # log
                         gr.update(visible=False),           # download
@@ -554,7 +621,7 @@ class EtherealCanvasUI:
             # Wire up events
             generate_btn.click(
                 fn=handle_generate,
-                inputs=[prompt_input, seed_input, t2i_encoder, t2i_size],
+                inputs=[prompt_input, seed_input, t2i_encoder, t2i_size, t2i_rewrite],
                 outputs=[t2i_output, t2i_log, t2i_download, generate_btn],
                 show_progress="minimal"
             ).then(

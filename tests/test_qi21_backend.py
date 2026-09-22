@@ -126,9 +126,8 @@ for label, fn in (
 # ------------------------------------------------------- 5. optional offload
 os.environ["EC_QI21_SEQUENTIAL_CPU_OFFLOAD"] = "1"
 QwenImage21Backend().load()
-check("offload: sequential component order applied",
-      CAPTURED.get("offload", {}).get("model_cpu_offload_seq") ==
-      "text_encoder->transformer->vae", str(CAPTURED.get("offload")))
+check("offload: flag reaches enable_model_cpu_offload bare",
+      CAPTURED.get("offload") == {}, str(CAPTURED.get("offload")))
 del os.environ["EC_QI21_SEQUENTIAL_CPU_OFFLOAD"]
 
 # ------------------------------------------------------- 6. routing + memory

@@ -41,7 +41,8 @@ def load_backend():
 
 def execute_task(task_type, prompt_text=None, seed=None, input_path=None, mask_path=None,
                  text_encoder=None, width=None, height=None,
-                 output_resolution=None):
+                 output_resolution=None, prompt_rewrite=None,
+                 progress_cb=None):
     """Execute a single task."""
     
     if task_type not in SUPPORTED_TASKS:
@@ -60,11 +61,15 @@ def execute_task(task_type, prompt_text=None, seed=None, input_path=None, mask_p
             size = {}
             if width and height:
                 size = {"width": int(width), "height": int(height)}
+            extra = dict(size)
             if text_encoder:
-                output_path = backend_adapter.generate(
-                    prompt_text, text_encoder=text_encoder, **size)
-            elif size:
-                output_path = backend_adapter.generate(prompt_text, **size)
+                extra["text_encoder"] = text_encoder
+            if prompt_rewrite:
+                extra["prompt_rewrite"] = prompt_rewrite
+            if progress_cb is not None:
+                extra["progress_cb"] = progress_cb
+            if extra:
+                output_path = backend_adapter.generate(prompt_text, **extra)
             else:
                 output_path = backend_adapter.generate(prompt_text)
         elif task_type == "edit":
@@ -75,6 +80,8 @@ def execute_task(task_type, prompt_text=None, seed=None, input_path=None, mask_p
                 extra["text_encoder"] = text_encoder
             if output_resolution:
                 extra["output_resolution"] = int(output_resolution)
+            if progress_cb is not None:
+                extra["progress_cb"] = progress_cb
             if extra:
                 output_path = backend_adapter.edit(
                     prompt_text, input_path, **extra)
