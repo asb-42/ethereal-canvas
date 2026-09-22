@@ -135,6 +135,18 @@ class QwenImage21Backend:
         # The DiT attention path is the sharpest memory spike on a single GPU.
         self.pipeline.enable_attention_slicing()
 
+        # Opt-in xformers memory-efficient attention: the remaining lever
+        # against the ~118 GiB peak on a 121.6 GiB package (driver was seen
+        # failing _memdescAlloc mid-run). Off by default because xformers
+        # previously caused CPU/CUDA tensor mismatches on the legacy pair;
+        # untested on 2.1 until measured. Enable with EC_QI21_XFORMERS=1.
+        if _env_flag("EC_QI21_XFORMERS"):
+            try:
+                self.pipeline.enable_xformers_memory_efficient_attention()
+                logger.info("xFormers memory-efficient attention enabled")
+            except Exception as exc:
+                logger.warning(f"xFormers unavailable, continuing without: {exc}")
+
         # Free hand over VRAM: stage components on the CPU in dependency order.
         # This snapshot's enable_model_cpu_offload takes no tuning kwargs
         # (no weights_on_gpu / memory-reserve / order arguments exist here),
