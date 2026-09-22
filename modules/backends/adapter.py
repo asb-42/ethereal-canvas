@@ -60,9 +60,14 @@ class BackendAdapter:
                 raise
         return self.backends['t2i']
     
-    def generate(self, prompt):
+    def generate(self, prompt, **kwargs):
         """Route text-to-image generation."""
-        return self._get_t2i_backend().generate(prompt)
+        backend = self._get_t2i_backend()
+        if kwargs and not hasattr(backend, "generate_image"):
+            # Legacy backends speak generate(prompt) only; extras like the
+            # text-encoder choice are 2.1-only and must not break them.
+            kwargs = {}
+        return backend.generate(prompt, **kwargs)
     
     def _get_edit_backend(self):
         """Lazy load edit backend."""
@@ -77,9 +82,12 @@ class BackendAdapter:
                 raise
         return self.backends['edit']
     
-    def edit(self, prompt, input_path):
+    def edit(self, prompt, input_path, **kwargs):
         """Route image editing."""
-        return self._get_edit_backend().edit(prompt, input_path)
+        backend = self._get_edit_backend()
+        if kwargs and not hasattr(backend, "generate_image"):
+            kwargs = {}
+        return backend.edit(prompt, input_path, **kwargs)
     
     def _get_inpaint_backend(self):
         """Lazy load the Inpaint backend.

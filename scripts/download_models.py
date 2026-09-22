@@ -154,10 +154,15 @@ KNOWN_MODELS = [
     # text models for someone who never enabled the feature is not a courtesy.
     "Qwen/Qwen-Image-2.1-PE-T2I",   # Prompt rewriter, text to image
     "Qwen/Qwen-Image-2.1-PE-I2I",   # Prompt rewriter, image editing
+    # Abliterated 2.1 text encoder (Qwen3-VL-8B, bf16 safetensors): a drop-in
+    # for the pipeline's stock encoder, selectable per generation in the UI.
+    # Opt-in like the rewriters: 17.5 GiB nobody asked for is not a courtesy.
+    "pottokao/Qwen-Image-2.1-Text-Encoder-Heretic",
 ]
 
 #: What an unqualified run fetches. Optional companions stay opt-in.
-DEFAULT_MODELS = [m for m in KNOWN_MODELS if "-PE-" not in m]
+DEFAULT_MODELS = [m for m in KNOWN_MODELS
+                  if "-PE-" not in m and "Heretic" not in m]
 
 
 def main(argv=None) -> int:

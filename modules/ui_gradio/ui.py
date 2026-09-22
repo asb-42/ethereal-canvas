@@ -60,7 +60,8 @@ class EtherealCanvasUI:
         timestamp = datetime.now().strftime("%H:%M:%S")
         return f"[{timestamp}] {status}: {message}"
     
-    def generate_t2i(self, prompt: str, seed: int | None = None):
+    def generate_t2i(self, prompt: str, seed: int | None = None,
+                     text_encoder: str | None = None):
         """Generate image from text prompt."""
         if self.is_processing:
             return None, "⚠️ Another task is running. Please wait...", "error"
@@ -83,15 +84,18 @@ class EtherealCanvasUI:
             # Execute generation using adapter if available, otherwise fallback
             if self.backend_adapter:
                 print("🔍 Testing backend adapter...")
-                result = self.backend_adapter.generate(prompt)
+                result = self.backend_adapter.generate(
+                    prompt, **({"text_encoder": text_encoder} if text_encoder else {}))
                 print(f"🔍 Backend result: {result}")
             else:
                 print("🔍 Using task runner fallback...")
                 # Fallback to simple task runner
                 if seed is not None and seed > 0:
-                    result = execute_task("generate", prompt, seed=seed)
+                    result = execute_task("generate", prompt, seed=seed,
+                                          text_encoder=text_encoder)
                 else:
-                    result = execute_task("generate", prompt)
+                    result = execute_task("generate", prompt,
+                                          text_encoder=text_encoder)
                 print(f"🔍 Task runner result: {result}")
             
             # Get actual image path
@@ -143,7 +147,8 @@ class EtherealCanvasUI:
             gr.update(interactive=False)  # disable abort button
         )
     
-    def edit_i2i(self, image_file, prompt: str, seed: int | None = None):
+    def edit_i2i(self, image_file, prompt: str, seed: int | None = None,
+                 text_encoder: str | None = None):
         """Edit image based on prompt."""
         if self.is_processing:
             return None, "⚠️ Another task is running. Please wait...", "error"
@@ -171,13 +176,17 @@ class EtherealCanvasUI:
             
             # Execute edit using adapter if available, otherwise fallback
             if self.backend_adapter:
-                result = self.backend_adapter.edit(prompt, image_path)
+                result = self.backend_adapter.edit(
+                    prompt, image_path,
+                    **({"text_encoder": text_encoder} if text_encoder else {}))
             else:
                 # Fallback to simple task runner
                 if seed is not None and seed > 0:
-                    result = execute_task("edit", prompt, input_path=image_path, seed=seed)
+                    result = execute_task("edit", prompt, input_path=image_path, seed=seed,
+                                          text_encoder=text_encoder)
                 else:
-                    result = execute_task("edit", prompt, input_path=image_path)
+                    result = execute_task("edit", prompt, input_path=image_path,
+                                          text_encoder=text_encoder)
             
             # Get actual image path
             if os.path.exists(result):
@@ -312,6 +321,13 @@ class EtherealCanvasUI:
                                     precision=0,
                                     info="Leave empty for random seed"
                                 )
+
+                                t2i_encoder = gr.Dropdown(
+                                    label="Text encoder",
+                                    choices=["Stock", "Heretic (abliterated)"],
+                                    value="Stock",
+                                    info="Heretic removes refusal behaviour; needs its weights on disk"
+                                )
                                 
                                 with gr.Row():
                                     generate_btn = gr.Button(
@@ -375,6 +391,13 @@ class EtherealCanvasUI:
                                     precision=0,
                                     info="Leave empty for random seed"
                                 )
+
+                                edit_encoder = gr.Dropdown(
+                                    label="Text encoder",
+                                    choices=["Stock", "Heretic (abliterated)"],
+                                    value="Stock",
+                                    info="Heretic removes refusal behaviour; needs its weights on disk"
+                                )
                                 
                                 with gr.Row():
                                     edit_btn = gr.Button(
@@ -420,9 +443,13 @@ class EtherealCanvasUI:
             """)
             
             # Event handlers
-            def handle_generate(prompt, seed):
+            def _variant(label):
+                return "heretic" if label and "heretic" in label.lower() else "stock"
+
+            def handle_generate(prompt, seed, encoder_label):
                 """Handle generate button click."""
-                image_path, log_msg, status = self.generate_t2i(prompt, seed)
+                image_path, log_msg, status = self.generate_t2i(
+                    prompt, seed, text_encoder=_variant(encoder_label))
                 
                 if status == "success" and image_path and os.path.exists(image_path):
                     return (
@@ -439,9 +466,10 @@ class EtherealCanvasUI:
                         gr.update(interactive=False)          # disable button
                     )
             
-            def handle_edit(image, prompt, seed):
+            def handle_edit(image, prompt, seed, encoder_label):
                 """Handle edit button click."""
-                image_path, log_msg, status = self.edit_i2i(image, prompt, seed)
+                image_path, log_msg, status = self.edit_i2i(
+                    image, prompt, seed, text_encoder=_variant(encoder_label))
                 
                 if status == "success" and image_path and os.path.exists(image_path):
                     return (
@@ -468,7 +496,7 @@ class EtherealCanvasUI:
             # Wire up events
             generate_btn.click(
                 fn=handle_generate,
-                inputs=[prompt_input, seed_input],
+                inputs=[prompt_input, seed_input, t2i_encoder],
                 outputs=[t2i_output, t2i_log, t2i_download, generate_btn],
                 show_progress="minimal"
             ).then(
@@ -478,7 +506,7 @@ class EtherealCanvasUI:
             
             edit_btn.click(
                 fn=handle_edit,
-                inputs=[input_image, edit_prompt, edit_seed],
+                inputs=[input_image, edit_prompt, edit_seed, edit_encoder],
                 outputs=[edit_output, edit_log, edit_download, edit_btn],
                 show_progress="minimal"
             ).then(

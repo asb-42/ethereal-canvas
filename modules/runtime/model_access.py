@@ -74,6 +74,14 @@ MODEL_LICENSES = {
         "license": "Apache License 2.0",
         "url": "https://huggingface.co/Qwen/Qwen-Image-Edit-2511",
     },
+    # Community abliteration of the 2.1 text encoder (Qwen3-VL-8B): refusal
+    # behaviour removed via directional ablation, bf16, same shapes as stock.
+    # Card front matter says apache-2.0, gated = false. It is a transformers
+    # checkpoint swapped into the diffusers pipeline, not a pipeline itself.
+    "pottokao/Qwen-Image-2.1-Text-Encoder-Heretic": {
+        "license": "Apache License 2.0",
+        "url": "https://huggingface.co/pottokao/Qwen-Image-2.1-Text-Encoder-Heretic",
+    },
 }
 
 # Set to "1" for headless or CI runs where the operator has already read the

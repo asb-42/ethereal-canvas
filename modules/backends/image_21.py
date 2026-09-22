@@ -32,6 +32,13 @@ PIPELINE_CLASS = "QwenImage21Pipeline"
 RECOMMENDED_EDIT_RESOLUTION = 2048
 LIBRARY_DEFAULT_RESOLUTION = 1024
 
+#: Drop-in text encoder variants for the 2.1 pipeline. "stock" is the encoder
+#: shipped inside Qwen/Qwen-Image-2.1; "heretic" is the community abliteration
+#: (refusal removed, same shapes/dtype), fetched separately and swapped into
+#: the live pipeline per generation.
+HERETIC_MODEL_ID = "pottokao/Qwen-Image-2.1-Text-Encoder-Heretic"
+TEXT_ENCODER_VARIANTS = ("stock", "heretic")
+
 #: The card fixes both of these; the library defaults already agree with them,
 #: but they are stated so a future library default change cannot silently
 #: undo the tuning.
@@ -58,6 +65,10 @@ class QwenImage21Backend:
         self.device = device if torch.cuda.is_available() else "cpu"
         self.dtype = getattr(torch, dtype, torch.bfloat16)
         self.is_loaded = False
+        # Which text encoder the live pipeline currently carries. Swapped per
+        # generation by _ensure_text_encoder; "stock" is what from_pretrained
+        # puts there, "heretic" the abliterated drop-in.
+        self.text_encoder_variant = "stock"
         # The companion prompt-expansion model, loaded on first use only when the
         # feature is switched on. Kept here rather than module-global so two
         # backends do not silently share a GPU resident 9B.
@@ -111,7 +122,72 @@ class QwenImage21Backend:
 
         self.is_loaded = True
         logger.info(f"{self.model_name} loaded on {self.device}")
+
+        # Honour a non-stock encoder requested for the whole launch, so a box
+        # that only ever serves Heretic pays the swap once, not per call.
+        want = os.environ.get("EC_QI21_TEXT_ENCODER", "stock").strip().lower()
+        if want and want != "stock":
+            self._ensure_text_encoder(want)
         return True
+
+    # ------------------------------------------------------- text encoder swap
+    def _ensure_text_encoder(self, variant: str) -> None:
+        """Carry ``variant`` ("stock" or "heretic") on the live pipeline.
+
+        Stock needs no work: it is what from_pretrained installed. Heretic is
+        loaded from the local snapshot and swapped in place, so switching costs
+        one 17.5 GiB encoder load, not a second full pipeline. Anything
+        unrecognised, unlicensed, or absent from disk raises with the command
+        that fixes it rather than silently rendering with the wrong encoder.
+        """
+        want = (variant or "stock").strip().lower()
+        if want not in TEXT_ENCODER_VARIANTS:
+            raise ValueError(
+                f"unknown text encoder {variant!r}; "
+                f"choose one of {list(TEXT_ENCODER_VARIANTS)}")
+        if want == self.text_encoder_variant:
+            return
+        if self.pipeline is None and not self.load():
+            raise RuntimeError("pipeline unavailable after load")
+
+        if want == "stock":
+            raise RuntimeError(
+                "switching back to the stock encoder needs a fresh load: "
+                "restart the UI (or release() this backend) rather than "
+                "re-fetching 17.5 GiB of stock weights that were overwritten "
+                "in memory")
+        model_access.require(HERETIC_MODEL_ID)
+
+        from modules.backends.prompt_rewriter import _local_snapshot
+        snap = _local_snapshot(HERETIC_MODEL_ID, require_weights=True)
+        if snap is None:
+            raise RuntimeError(
+                f"Heretic encoder is not on disk; fetch it with: "
+                f"python scripts/download_models.py --model {HERETIC_MODEL_ID} "
+                f"(after accepting its terms: "
+                f"python scripts/accept_model_license.py "
+                f"--model {HERETIC_MODEL_ID} --yes)")
+
+        from transformers import Qwen3VLForConditionalGeneration
+        logger.info(f"Loading Heretic text encoder from {snap}")
+        enc = Qwen3VLForConditionalGeneration.from_pretrained(
+            str(snap), dtype=self.dtype,
+            device_map="auto", local_files_only=True).eval()
+
+        old = self.pipeline.text_encoder
+        self.pipeline.text_encoder = enc.to(self.device) \
+            if self.device == "cpu" else enc
+        del old
+        if _env_flag("EC_QI21_SEQUENTIAL_CPU_OFFLOAD"):
+            order = os.environ.get(
+                "EC_QI21_OFFLOAD_ORDER", "text_encoder->transformer->vae")
+            self.pipeline.enable_model_cpu_offload(
+                weights_on_gpu=True, gpu_memory_reserve_bytes=1_000_000_000,
+                model_cpu_offload_seq=order)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        self.text_encoder_variant = "heretic"
+        logger.info("Heretic text encoder now serving")
 
     # ------------------------------------------------------------- generation
     # --------------------------------------------------------------------------
@@ -234,8 +310,15 @@ class QwenImage21Backend:
     # ------------------------------------------------------------- shared call
     def _call(self, **kwargs: Any) -> List[Any]:
         """Run the pipeline, passing only the keyword arguments it accepts."""
+        variant = kwargs.pop("text_encoder", None)
         if self.pipeline is None and not self.load():
             raise RuntimeError("pipeline unavailable after load")
+        if variant:
+            # Per-generation encoder choice from the UI switcher. A miss here
+            # must be loud: silently rendering Heretic-labelled output with
+            # the stock encoder (or vice versa) is the one failure mode that
+            # matters for this feature.
+            self._ensure_text_encoder(variant)
 
         negative_prompt = kwargs.pop("negative_prompt", None)
         num_steps = kwargs.pop("num_steps", NUM_INFERENCE_STEPS)
