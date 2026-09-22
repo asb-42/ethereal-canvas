@@ -40,7 +40,8 @@ def load_backend():
         log_simple(f"Failed to load backend: {e}", "ERROR")
 
 def execute_task(task_type, prompt_text=None, seed=None, input_path=None, mask_path=None,
-                 text_encoder=None):
+                 text_encoder=None, width=None, height=None,
+                 output_resolution=None):
     """Execute a single task."""
     
     if task_type not in SUPPORTED_TASKS:
@@ -56,17 +57,27 @@ def execute_task(task_type, prompt_text=None, seed=None, input_path=None, mask_p
             raise RuntimeError("Failed to initialize backend adapter")
         
         if task_type == "generate":
+            size = {}
+            if width and height:
+                size = {"width": int(width), "height": int(height)}
             if text_encoder:
                 output_path = backend_adapter.generate(
-                    prompt_text, text_encoder=text_encoder)
+                    prompt_text, text_encoder=text_encoder, **size)
+            elif size:
+                output_path = backend_adapter.generate(prompt_text, **size)
             else:
                 output_path = backend_adapter.generate(prompt_text)
         elif task_type == "edit":
             if not input_path:
                 raise ValueError("edit task requires input_path")
+            extra = {}
             if text_encoder:
+                extra["text_encoder"] = text_encoder
+            if output_resolution:
+                extra["output_resolution"] = int(output_resolution)
+            if extra:
                 output_path = backend_adapter.edit(
-                    prompt_text, input_path, text_encoder=text_encoder)
+                    prompt_text, input_path, **extra)
             else:
                 output_path = backend_adapter.edit(prompt_text, input_path)
         else:
