@@ -94,7 +94,13 @@ class MemoryManager:
         # Set environment variables to fix CUDA initialization
         os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
         os.environ["CUDA_MODULE_LOADING"] = "LAZY"
-        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,expandable_segments:True"
+        # expandable_segments is deliberately OFF: on the GB10 it inflated the
+        # process's virtual address space toward ~300 GiB (dmesg: global OOM
+        # naming python for total-vm, not resident use), making us the
+        # killer's preferred victim whenever the box needed a page.
+        # max_split_size_mb:512 keeps the block count (and fragmentation)
+        # down instead.
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
         
         # Suppress specific CUDA warnings
         warnings.filterwarnings("ignore", message=".*CUDA initialization.*forward compatibility.*")

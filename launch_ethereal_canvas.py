@@ -14,7 +14,7 @@ import warnings
 # Set CUDA environment variables BEFORE any imports
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 os.environ["CUDA_MODULE_LOADING"] = "LAZY"  
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128,expandable_segments:True"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # torch's native Triton override of aten::bmm needs Python.h, which is absent
 # on this box (no python3.12-dev), so the pipeline dies in a gcc compile at
