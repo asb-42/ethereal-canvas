@@ -112,13 +112,12 @@ class QwenImage21Backend:
         self.pipeline.enable_attention_slicing()
 
         # Free hand over VRAM: stage components on the CPU in dependency order.
+        # This snapshot's enable_model_cpu_offload takes no tuning kwargs
+        # (no weights_on_gpu / memory-reserve / order arguments exist here),
+        # so call it bare; extra kwargs die with TypeError at load.
         if _env_flag("EC_QI21_SEQUENTIAL_CPU_OFFLOAD"):
-            order = os.environ.get(
-                "EC_QI21_OFFLOAD_ORDER", "text_encoder->transformer->vae")
-            self.pipeline.enable_model_cpu_offload(
-                weights_on_gpu=True, gpu_memory_reserve_bytes=1_000_000_000,
-                model_cpu_offload_seq=order)
-            logger.info(f"Sequential CPU offload enabled ({order})")
+            self.pipeline.enable_model_cpu_offload()
+            logger.info("Sequential CPU offload enabled")
 
         self.is_loaded = True
         logger.info(f"{self.model_name} loaded on {self.device}")
@@ -191,11 +190,7 @@ class QwenImage21Backend:
             if self.device == "cpu" else enc
         del enc
         if _env_flag("EC_QI21_SEQUENTIAL_CPU_OFFLOAD"):
-            order = os.environ.get(
-                "EC_QI21_OFFLOAD_ORDER", "text_encoder->transformer->vae")
-            self.pipeline.enable_model_cpu_offload(
-                weights_on_gpu=True, gpu_memory_reserve_bytes=1_000_000_000,
-                model_cpu_offload_seq=order)
+            self.pipeline.enable_model_cpu_offload()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         self.text_encoder_variant = "heretic"
