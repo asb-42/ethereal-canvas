@@ -169,15 +169,27 @@ class QwenImage21Backend:
                 f"--model {HERETIC_MODEL_ID} --yes)")
 
         from transformers import Qwen3VLForConditionalGeneration
+        # Free the stock encoder BEFORE loading Heretic: the old order held
+        # both (~34 GiB) plus the DiT at once, which is the highest transient
+        # peak in the app on a 121.6 GiB device. Dropping the reference and
+        # emptying the cache first keeps the swap under the inference peak.
+        import gc
+        old = self.pipeline.text_encoder
+        self.pipeline.text_encoder = None
+        del old
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            if hasattr(torch.cuda, "synchronize"):
+                torch.cuda.synchronize()
         logger.info(f"Loading Heretic text encoder from {snap}")
         enc = Qwen3VLForConditionalGeneration.from_pretrained(
             str(snap), dtype=self.dtype,
             device_map="auto", local_files_only=True).eval()
 
-        old = self.pipeline.text_encoder
         self.pipeline.text_encoder = enc.to(self.device) \
             if self.device == "cpu" else enc
-        del old
+        del enc
         if _env_flag("EC_QI21_SEQUENTIAL_CPU_OFFLOAD"):
             order = os.environ.get(
                 "EC_QI21_OFFLOAD_ORDER", "text_encoder->transformer->vae")
