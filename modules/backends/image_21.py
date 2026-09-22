@@ -13,6 +13,7 @@ can still list the tab and fail with an actionable message instead of failing
 to import.
 """
 import os
+import threading
 from typing import Any, Dict, List, Optional, Union
 
 import torch
@@ -49,6 +50,29 @@ TRUE_CFG_SCALE = 1.0
 def _env_flag(name: str, default: bool = False) -> bool:
     return os.environ.get(name, str(int(default))).strip().lower() in (
         "1", "true", "yes", "on")
+
+
+#: Serializes inference across threads. Two overlapping runs on one shared
+#: pipeline oversubscribe a 121.6 GiB device and die; the second waiter
+#: blocks here instead of colliding. Crude FIFO, but a correct one.
+_INFERENCE_LOCK = threading.Lock()
+
+
+def _cleanup_between_jobs() -> None:
+    """Release the previous run's allocator reservation before the next one.
+
+    A finished run leaves tens of GiB reserved (not live) in PyTorch's
+    caching allocator; starting the next render into that fragmentation is
+    the observed finalize-then-crash pattern (SIGKILL one step in). Dumping
+    the reservation back to the device between jobs costs seconds and buys
+    back the headroom the next peak needs.
+    """
+    import gc
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        if hasattr(torch.cuda, "synchronize"):
+            torch.cuda.synchronize()
 
 
 class QwenImage21Backend:
@@ -426,7 +450,9 @@ class QwenImage21Backend:
                            if k in valid}
 
         try:
-            result = self.pipeline(**call_kwargs)
+            with _INFERENCE_LOCK:
+                _cleanup_between_jobs()
+                result = self.pipeline(**call_kwargs)
         except ValueError as exc:
             # Precomputed prompt embeddings cannot be combined with the image
             # padding mask path; surface that rather than masking it.
